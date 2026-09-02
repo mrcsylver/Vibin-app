@@ -198,9 +198,14 @@ app, and your app appears there.
 
 ### One thing to warn your testers about
 
-The radar only shows people **within 300 feet who also have the app open and are
-playing music**. On their own, testers will see an empty map and think it's
-broken. Tell them to test in pairs, in the same room.
+The radar only shows people **within 300 feet who also have the app open**. On
+their own, testers will see an empty map. Tell them to test in pairs, in the
+same room.
+
+There is now something to do alone, though: **Share my vibe** turns whatever
+they are playing into a retro card they can post to an Instagram or Snapchat
+story. Ask your first testers to post one — that is what brings the next
+testers in. It works even with nothing playing on Spotify.
 
 ---
 
@@ -276,7 +281,8 @@ Apple always asks why an app needs location in the background. Paste this:
 | Profile screen errors, likes stuck at 0 | Database not updated | Redo step 1.1 |
 | Spotify login opens then shows an error | Redirect address missing | See step 1.3 |
 | Radar says "Location access needed" | The tester tapped Don't Allow | Normal — the button on that screen opens iOS Settings |
-| Map is empty | Nobody else is within 300 ft with the app open | Not a bug. Test in pairs |
+| Map is empty | Nobody else is within 300 ft with the app open | Not a bug. Test in pairs, and use Share my vibe meanwhile |
+| Share sheet has no Instagram or Snapchat | Those apps are not installed on that device | Use Save Image, then post it from the app itself |
 | "You're on ..." never appears | Nothing playing on Spotify | Not a bug — the app now says so and asks them to set a status instead |
 | Build fails mentioning certificates or `aps-environment` | Apple's security files got confused | Run `eas credentials`, pick iOS → production, and let EAS regenerate them |
 | `command not found: eas` | Build tool not installed | Redo step 1.4 |

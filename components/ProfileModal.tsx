@@ -148,6 +148,13 @@ export function ProfileModal({
               </View>
             </View>
 
+            <Text style={styles.sectionTitle}>What are you up to?</Text>
+            <View style={styles.statusBox}>
+              <Text style={profile.status.trim() ? styles.statusText : styles.statusEmpty}>
+                {profile.status.trim() || 'No status yet — set one from the radar screen.'}
+              </Text>
+            </View>
+
             <Text style={styles.sectionTitle}>All-time likes</Text>
             <View style={styles.hero}>
               <Text style={styles.heroValue}>{formatCount(totals.likesReceived)}</Text>
@@ -278,6 +285,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  statusBox: {
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(246, 228, 184, 0.22)',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  statusText: {
+    color: TILE_COLORS.ringParchment,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  statusEmpty: {
+    color: 'rgba(246, 228, 184, 0.5)',
+    fontSize: 14,
+    fontWeight: '600',
+    fontStyle: 'italic',
   },
   hero: {
     alignItems: 'center',

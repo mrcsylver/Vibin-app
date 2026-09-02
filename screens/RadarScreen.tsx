@@ -17,6 +17,7 @@ import { RadarCanvas } from '../components/RadarCanvas';
 import { NearbySheet } from '../components/NearbySheet';
 import { StatusComposer } from '../components/StatusComposer';
 import { ProfileModal } from '../components/ProfileModal';
+import { ShareVibeModal } from '../components/ShareVibeModal';
 import { useSession } from '../context/SessionContext';
 import { APP_NAME, COLORS, TILE_COLORS } from '../utils/constants';
 import { metersToFeet } from '../utils/geo';
@@ -45,6 +46,7 @@ export function RadarScreen() {
   const [statusDraft, setStatusDraft] = useState(profile?.status ?? '');
   const [liking, setLiking] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const size = Math.min(Dimensions.get('window').width - 8, 420);
 
   if (!profile) {
@@ -128,7 +130,7 @@ export function RadarScreen() {
               <>
                 {nearby.length === 0 ? (
                   <View style={styles.emptyHint} pointerEvents="none">
-                    <Text style={styles.emptyText}>Listening for vibes within 300 ft…</Text>
+                    <Text style={styles.emptyText}>Scanning 300 ft…</Text>
                   </View>
                 ) : null}
                 <RadarCanvas
@@ -161,6 +163,19 @@ export function RadarScreen() {
             )}
           </View>
 
+          {locationReady ? (
+            <View style={styles.shareRow}>
+              {nearby.length === 0 ? (
+                <Text style={styles.aloneText}>
+                  Nobody within 300 ft yet. Post your vibe card so people know where to find you.
+                </Text>
+              ) : null}
+              <Pressable onPress={() => setShareOpen(true)} style={styles.shareCta}>
+                <Text style={styles.shareCtaText}>Share my vibe</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           <StatusComposer value={statusDraft} onChange={setStatusDraft} onSubmit={() => void onSubmitStatus()} />
           {!track && !lastError && locationReady ? (
             <View style={styles.loadingRow}>
@@ -171,6 +186,14 @@ export function RadarScreen() {
 
         <NearbySheet ref={sheetRef} vibe={selected} onLike={() => void onLike()} liking={liking} />
       </SafeAreaView>
+
+      <ShareVibeModal
+        visible={shareOpen}
+        profile={profile}
+        track={track}
+        coords={coords}
+        onClose={() => setShareOpen(false)}
+      />
 
       <ProfileModal
         visible={profileOpen}
@@ -306,6 +329,32 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  shareRow: {
+    paddingHorizontal: 22,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  aloneText: {
+    color: 'rgba(246, 228, 184, 0.72)',
+    fontSize: 12.5,
+    fontWeight: '600',
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  shareCta: {
+    paddingVertical: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: TILE_COLORS.ringGold,
+    backgroundColor: 'rgba(255, 217, 122, 0.12)',
+  },
+  shareCtaText: {
+    color: TILE_COLORS.ringGold,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    fontSize: 15,
   },
   loadingRow: {
     alignItems: 'center',
