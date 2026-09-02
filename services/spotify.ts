@@ -5,6 +5,7 @@ import { APP_SCHEME, SPOTIFY_REDIRECT_PATH } from '../utils/constants';
 import { extractAlbumColor } from '../utils/colors';
 import { getPublicEnv } from './config';
 import { loadTokens, saveTokens } from './storage';
+import { interpretPlayback, nothingPlaying, type SpotifyPlayingJson } from '../utils/nowPlaying';
 import type { NowPlaying, SpotifyTokens } from '../types';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -126,38 +127,49 @@ export async function fetchSpotifyMe(accessToken: string): Promise<{ id: string;
   return { id: json.id, displayName: json.display_name ?? 'listener' };
 }
 
-type SpotifyPlayingJson = {
-  item?: {
-    name?: string;
-    artists?: { name: string }[];
-    album?: { images?: { url: string }[] };
-  } | null;
-};
-
+/**
+ * What the listener is playing on Spotify, if anything.
+ *
+ * Never throws and never collapses every case into a bare "nothing playing":
+ * plenty of listeners are on Apple Music, a record player, or a private
+ * session, and they still belong on the radar with their status line. The
+ * distinct states let the UI say something true instead of always nagging
+ * about Spotify. Parsing lives in `utils/nowPlaying.ts`.
+ */
 export async function fetchNowPlaying(): Promise<NowPlaying> {
-  const accessToken = await getValidAccessToken();
+  let accessToken: string | null = null;
+  try {
+    accessToken = await getValidAccessToken();
+  } catch {
+    return nothingPlaying('unavailable');
+  }
   if (!accessToken) {
-    return { title: null, artist: null, albumArtUrl: null, albumColor: null };
+    return nothingPlaying('unlinked');
   }
 
-  const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  // 204 = nothing playing
-  if (res.status === 204 || !res.ok) {
-    return { title: null, artist: null, albumArtUrl: null, albumColor: null };
+  let status: number;
+  let json: SpotifyPlayingJson | null = null;
+  try {
+    const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    status = res.status;
+    if (res.ok && res.status !== 204) {
+      json = (await res.json().catch(() => null)) as SpotifyPlayingJson | null;
+    }
+  } catch {
+    // Offline, or the request was cut short. Presence still gets published.
+    return nothingPlaying('unavailable');
   }
 
-  const json = (await res.json()) as SpotifyPlayingJson;
-  const item = json.item;
-  const albumArtUrl = item?.album?.images?.[0]?.url ?? null;
-  const albumColor = await extractAlbumColor(albumArtUrl);
+  const playback = interpretPlayback(status, json);
+  if (!playback.albumArtUrl) {
+    return playback;
+  }
 
-  return {
-    title: item?.name ?? null,
-    artist: item?.artists?.map((a) => a.name).join(', ') ?? null,
-    albumArtUrl,
-    albumColor,
-  };
+  try {
+    return { ...playback, albumColor: await extractAlbumColor(playback.albumArtUrl) };
+  } catch {
+    return playback;
+  }
 }

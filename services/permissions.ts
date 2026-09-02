@@ -10,6 +10,8 @@ export type PermissionState = {
   notifications: boolean;
   /** The user denied location and iOS/Android will no longer show a prompt. */
   locationBlocked: boolean;
+  /** Same for notifications — the only way back is the Settings app. */
+  notificationsBlocked: boolean;
 };
 
 export const UNKNOWN_PERMISSIONS: PermissionState = {
@@ -18,6 +20,7 @@ export const UNKNOWN_PERMISSIONS: PermissionState = {
   locationBackground: false,
   notifications: false,
   locationBlocked: false,
+  notificationsBlocked: false,
 };
 
 async function ensureAndroidChannels(): Promise<void> {
@@ -30,27 +33,31 @@ async function ensureAndroidChannels(): Promise<void> {
   });
 }
 
-async function ensureNotifications(): Promise<boolean> {
+type NotificationState = { granted: boolean; blocked: boolean };
+
+function readNotificationGrant(response: Notifications.NotificationPermissionsStatus): boolean {
+  return (
+    response.granted ||
+    response.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+  );
+}
+
+async function ensureNotifications(): Promise<NotificationState> {
   try {
     await ensureAndroidChannels();
 
     const current = await Notifications.getPermissionsAsync();
-    if (
-      current.granted ||
-      current.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
-    ) {
-      return true;
+    if (readNotificationGrant(current)) {
+      return { granted: true, blocked: false };
     }
     if (!current.canAskAgain) {
-      return false;
+      return { granted: false, blocked: true };
     }
 
     const asked = await Notifications.requestPermissionsAsync();
-    return (
-      asked.granted || asked.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
-    );
+    return { granted: readNotificationGrant(asked), blocked: !asked.canAskAgain };
   } catch {
-    return false;
+    return { granted: false, blocked: false };
   }
 }
 
@@ -70,12 +77,14 @@ export async function ensurePermissions(): Promise<PermissionState> {
   }
 
   if (!foreground.granted) {
+    const notifications = await ensureNotifications();
     return {
       servicesEnabled,
       locationForeground: false,
       locationBackground: false,
       locationBlocked: !foreground.canAskAgain,
-      notifications: await ensureNotifications(),
+      notifications: notifications.granted,
+      notificationsBlocked: notifications.blocked,
     };
   }
 
@@ -92,12 +101,15 @@ export async function ensurePermissions(): Promise<PermissionState> {
     background = false;
   }
 
+  const notifications = await ensureNotifications();
+
   return {
     servicesEnabled,
     locationForeground: true,
     locationBackground: background,
     locationBlocked: false,
-    notifications: await ensureNotifications(),
+    notifications: notifications.granted,
+    notificationsBlocked: notifications.blocked,
   };
 }
 
@@ -121,10 +133,8 @@ export async function readPermissions(): Promise<PermissionState> {
     locationForeground: foreground.granted,
     locationBackground: background,
     locationBlocked: !foreground.granted && !foreground.canAskAgain,
-    notifications: Boolean(
-      notifications?.granted ||
-        notifications?.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL,
-    ),
+    notifications: notifications ? readNotificationGrant(notifications) : false,
+    notificationsBlocked: notifications ? !notifications.granted && !notifications.canAskAgain : false,
   };
 }
 

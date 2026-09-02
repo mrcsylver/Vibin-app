@@ -15,7 +15,26 @@ export type SpotifyTokens = {
   expiresAt: number;
 };
 
+/**
+ * Why the radar is or is not showing a track. Anything other than `playing`
+ * and `podcast` means we fall back to the user's own status line.
+ */
+export type NowPlayingState =
+  /** A Spotify track is playing. */
+  | 'playing'
+  /** A Spotify podcast episode is playing. */
+  | 'podcast'
+  /** Something is loaded but paused. */
+  | 'paused'
+  /** Spotify has nothing playing, or the listener is in a private session. */
+  | 'idle'
+  /** No Spotify account linked, or the saved token no longer works. */
+  | 'unlinked'
+  /** Spotify could not be reached — offline, rate limited, or an outage. */
+  | 'unavailable';
+
 export type NowPlaying = {
+  state: NowPlayingState;
   title: string | null;
   artist: string | null;
   albumArtUrl: string | null;

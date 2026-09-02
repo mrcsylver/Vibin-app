@@ -5,6 +5,7 @@ import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/botto
 import type { NearbyVibe } from '../types';
 import { formatFeet } from '../utils/geo';
 import { COLORS } from '../utils/constants';
+import { describeOtherListener } from '../utils/nowPlaying';
 
 type Props = {
   vibe: NearbyVibe | null;
@@ -17,6 +18,10 @@ export const NearbySheet = forwardRef<BottomSheet, Props>(function NearbySheet(
   ref,
 ) {
   const snapPoints = useMemo(() => ['42%'], []);
+  const headline = useMemo(
+    () => describeOtherListener(vibe?.track_title ?? null, vibe?.status ?? '', vibe?.username ?? 'listener'),
+    [vibe?.track_title, vibe?.status, vibe?.username],
+  );
 
   return (
     <BottomSheet
@@ -37,11 +42,18 @@ export const NearbySheet = forwardRef<BottomSheet, Props>(function NearbySheet(
               <Image source={{ uri: vibe.album_art_url ?? vibe.avatar_url }} style={styles.art} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.kicker}>{formatFeet(vibe.distance_m)} away</Text>
-                <Text style={styles.title}>{vibe.track_title ?? 'Nothing playing'}</Text>
-                <Text style={styles.artist}>{vibe.track_artist ?? vibe.username}</Text>
+                <Text style={styles.title}>{headline.title}</Text>
+                <Text style={styles.artist}>
+                  {vibe.track_artist ?? headline.subtitle}
+                </Text>
               </View>
             </View>
-            {vibe.status ? <Text style={styles.status}>{vibe.status}</Text> : null}
+            {/* Someone on Apple Music, a record player, or a private session
+                still gets a pin — their status stands in for the track. */}
+            {vibe.track_title ? null : <Text style={styles.offSpotify}>Not sharing a track</Text>}
+            {vibe.status && vibe.status.trim() !== headline.title ? (
+              <Text style={styles.status}>{vibe.status}</Text>
+            ) : null}
             <Pressable onPress={onLike} disabled={liking} style={[styles.like, liking && { opacity: 0.6 }]}>
               <Text style={styles.likeText}>{liking ? 'Sending nudge…' : 'Nudge / Like'}</Text>
             </Pressable>
@@ -95,6 +107,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: COLORS.muted,
     fontWeight: '600',
+  },
+  offSpotify: {
+    alignSelf: 'flex-start',
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    backgroundColor: 'rgba(126, 87, 194, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
   status: {
     fontSize: 15,

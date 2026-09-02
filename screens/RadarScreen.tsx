@@ -16,10 +16,11 @@ import * as Haptics from 'expo-haptics';
 import { RadarCanvas } from '../components/RadarCanvas';
 import { NearbySheet } from '../components/NearbySheet';
 import { StatusComposer } from '../components/StatusComposer';
-import { AllTimeLikesModal } from '../components/AllTimeLikesModal';
+import { ProfileModal } from '../components/ProfileModal';
 import { useSession } from '../context/SessionContext';
 import { APP_NAME, COLORS, TILE_COLORS } from '../utils/constants';
 import { metersToFeet } from '../utils/geo';
+import { describePlayback } from '../utils/nowPlaying';
 import { pushStatus, sendLike } from '../services/presence';
 import { openAppSettings } from '../services/permissions';
 import type { NearbyVibe } from '../types';
@@ -43,7 +44,7 @@ export function RadarScreen() {
   const [selected, setSelected] = useState<NearbyVibe | null>(null);
   const [statusDraft, setStatusDraft] = useState(profile?.status ?? '');
   const [liking, setLiking] = useState(false);
-  const [likesOpen, setLikesOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const size = Math.min(Dimensions.get('window').width - 8, 420);
 
   if (!profile) {
@@ -51,6 +52,7 @@ export function RadarScreen() {
   }
 
   const locationReady = permissions.locationForeground && permissions.servicesEnabled;
+  const playback = describePlayback(track);
 
   const onSelect = (vibe: NearbyVibe) => {
     setSelected(vibe);
@@ -93,8 +95,8 @@ export function RadarScreen() {
     await requestPermissions();
   };
 
-  const openLikes = () => {
-    setLikesOpen(true);
+  const openProfile = () => {
+    setProfileOpen(true);
     void refreshLikeTotals();
   };
 
@@ -107,17 +109,18 @@ export function RadarScreen() {
               <Text style={styles.kicker}>{APP_NAME.toUpperCase()}</Text>
               <Text style={styles.title}>Campus radar</Text>
               <Text style={styles.meta} numberOfLines={1}>
-                {track?.title ? `You're on ${track.title}` : 'Play something on Spotify to glow'}
+                {playback.line}
               </Text>
             </View>
 
-            <Pressable onPress={openLikes} style={styles.likesPill} accessibilityRole="button">
+            <Pressable onPress={openProfile} style={styles.likesPill} accessibilityRole="button">
               <Text style={styles.likesHeart}>♥</Text>
               <Text style={styles.likesCount}>{likeTotals.likesReceived}</Text>
               <Text style={styles.likesCaption}>all-time</Text>
             </Pressable>
           </View>
 
+          {playback.nudge ? <Text style={styles.nudge}>{playback.nudge}</Text> : null}
           {lastError && locationReady ? <Text style={styles.error}>{lastError}</Text> : null}
 
           <View style={styles.radar}>
@@ -169,12 +172,16 @@ export function RadarScreen() {
         <NearbySheet ref={sheetRef} vibe={selected} onLike={() => void onLike()} liking={liking} />
       </SafeAreaView>
 
-      <AllTimeLikesModal
-        visible={likesOpen}
-        username={profile.username}
+      <ProfileModal
+        visible={profileOpen}
+        profile={profile}
         totals={likeTotals}
+        track={track}
+        permissions={permissions}
         onRefresh={refreshLikeTotals}
-        onClose={() => setLikesOpen(false)}
+        onRequestPermissions={requestPermissions}
+        onOpenSettings={openAppSettings}
+        onClose={() => setProfileOpen(false)}
       />
     </LinearGradient>
   );
@@ -235,6 +242,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  nudge: {
+    marginTop: 8,
+    marginHorizontal: 22,
+    color: 'rgba(246, 228, 184, 0.72)',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
   },
   error: {
     marginTop: 8,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,7 +15,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { AvatarBadge } from '../components/AvatarBadge';
 import { AvatarPicker } from '../components/AvatarPicker';
+import { LegalLinks } from '../components/LegalLinks';
 import { useSession } from '../context/SessionContext';
+import { openAppSettings } from '../services/permissions';
 import { assertConfigured } from '../services/config';
 import {
   exchangeSpotifyCode,
@@ -24,17 +26,20 @@ import {
   makeSpotifyRedirectUri,
   useSpotifyAuthRequest,
 } from '../services/spotify';
-import type { DiceBearStyle } from '../types';
+import type { DiceBearStyle, Profile } from '../types';
 import { buildAvatarUrl, randomSeed } from '../utils/avatar';
 import { APP_NAME, COLORS } from '../utils/constants';
 
 export function OnboardingScreen() {
-  const { setProfile, requestPermissions } = useSession();
+  const { setProfile, requestPermissions, permissions } = useSession();
   const [username, setUsername] = useState('');
   const [styleId, setStyleId] = useState<DiceBearStyle>('adventurer');
   const [seed, setSeed] = useState('campus-star');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(assertConfigured());
+  /** Set once Spotify is linked but location was refused, so we can explain
+   *  the consequence here instead of dropping the user onto an empty radar. */
+  const [pendingProfile, setPendingProfile] = useState<Profile | null>(null);
 
   const [request, , promptAsync] = useSpotifyAuthRequest();
   const avatarUrl = useMemo(() => buildAvatarUrl(styleId, seed || username || 'vibin'), [styleId, seed, username]);
@@ -67,32 +72,56 @@ export function OnboardingScreen() {
       const me = await fetchSpotifyMe(tokens.accessToken);
       const hashedId = await hashSpotifyUserId(me.id);
 
-      // Location and notifications are requested BEFORE the profile is saved.
-      // Saving the profile is what swaps in the radar screen, and the radar
-      // immediately asks the OS for a position — doing it the other way round
-      // is what raised DeniedForegroundLocationPermission on first launch.
-      const granted = await requestPermissions();
-
-      await setProfile({
+      const nextProfile: Profile = {
         hashedId,
         username: username.trim().slice(0, 24),
         avatarStyle: styleId,
         avatarSeed: seed,
         avatarUrl,
         status: '',
-      });
+      };
 
-      // A denial is not a dead end: the radar shows its own "enable location"
-      // gate with a shortcut into Settings.
-      if (granted.locationForeground) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
+      // Location and notifications are requested BEFORE the profile is saved.
+      // Saving the profile is what swaps in the radar screen, and the radar
+      // immediately asks the OS for a position — doing it the other way round
+      // is what raised DeniedForegroundLocationPermission on first launch.
+      const granted = await requestPermissions();
+
+      if (!granted.locationForeground) {
+        // Hold here rather than dropping them onto a radar that cannot work.
+        // They can fix it, or continue anyway and fix it later from the profile.
+        setPendingProfile(nextProfile);
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        return;
       }
+
+      await setProfile(nextProfile);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect Spotify.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const enterRadar = useCallback(() => {
+    if (pendingProfile) {
+      void setProfile(pendingProfile);
+    }
+  }, [pendingProfile, setProfile]);
+
+  // Granting from the Settings app refreshes `permissions` when we come back to
+  // the foreground; carry on into the radar without making them tap again.
+  useEffect(() => {
+    if (pendingProfile && permissions.locationForeground) {
+      void setProfile(pendingProfile);
+    }
+  }, [pendingProfile, permissions.locationForeground, setProfile]);
+
+  const retryLocation = async () => {
+    const granted = await requestPermissions();
+    if (!granted.locationForeground && granted.locationBlocked) {
+      await openAppSettings();
     }
   };
 
@@ -130,17 +159,47 @@ export function OnboardingScreen() {
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            <Pressable
-              onPress={onConnect}
-              disabled={busy}
-              style={[styles.cta, busy && { opacity: 0.7 }]}
-            >
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.ctaText}>Connect Spotify & Jump In</Text>
-              )}
-            </Pressable>
+            {/* Once Spotify is linked the banner below takes over as the primary
+                action, so re-running the whole OAuth flow is not offered. */}
+            {pendingProfile ? null : (
+              <>
+                <Pressable
+                  onPress={onConnect}
+                  disabled={busy}
+                  style={[styles.cta, busy && { opacity: 0.7 }]}
+                >
+                  {busy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.ctaText}>Connect Spotify & Jump In</Text>
+                  )}
+                </Pressable>
+
+                <Text style={styles.permissionNote}>
+                  Next you will be asked for location — it is what places you on the radar — and
+                  optionally for notifications, so you hear about nudges.
+                </Text>
+              </>
+            )}
+
+            {pendingProfile ? (
+              <View style={styles.denied}>
+                <Text style={styles.deniedTitle}>Location is off</Text>
+                <Text style={styles.deniedBody}>
+                  Your Spotify account is linked. {APP_NAME} still needs location to place you on the
+                  map — without it nobody can see you, and you cannot see anyone else.
+                </Text>
+                <Pressable onPress={() => void retryLocation()} style={styles.deniedCta}>
+                  <Text style={styles.deniedCtaText}>
+                    {permissions.locationBlocked ? 'Open Settings' : 'Allow location'}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={enterRadar} style={styles.deniedSkip} hitSlop={8}>
+                  <Text style={styles.deniedSkipText}>Continue without location</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <Text style={styles.hint}>
               Presence is ephemeral — your pin vanishes after 15 minutes of quiet. Nobody ever sees your
               coordinates, only how far away and which way you are.
@@ -149,6 +208,10 @@ export function OnboardingScreen() {
               Spotify redirect URI (paste into the Spotify Dashboard):{'\n'}
               {makeSpotifyRedirectUri()}
             </Text>
+
+            <View style={styles.footer}>
+              <LegalLinks tone="light" />
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -226,6 +289,60 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 12,
     lineHeight: 18,
+  },
+  permissionNote: {
+    marginTop: 14,
+    textAlign: 'center',
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  denied: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(198, 40, 40, 0.35)',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  deniedTitle: {
+    color: '#C62828',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  deniedBody: {
+    marginTop: 6,
+    color: COLORS.ink,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  deniedCta: {
+    marginTop: 12,
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: COLORS.cta,
+  },
+  deniedCtaText: {
+    color: COLORS.white,
+    fontWeight: '800',
+  },
+  deniedSkip: {
+    marginTop: 10,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  deniedSkipText: {
+    color: COLORS.muted,
+    fontWeight: '700',
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
+  footer: {
+    marginTop: 22,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(126, 87, 194, 0.15)',
   },
   redirect: {
     marginTop: 12,
