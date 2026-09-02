@@ -21,7 +21,13 @@ function Gate() {
       </View>
     );
   }
-  return profile ? <RadarScreen /> : <OnboardingScreen />;
+  // The radar is dark and onboarding is pastel, so the bar has to follow.
+  return (
+    <>
+      {profile ? <RadarScreen /> : <OnboardingScreen />}
+      <StatusBar style={profile ? 'light' : 'dark'} />
+    </>
+  );
 }
 
 export default function App() {
@@ -31,7 +37,6 @@ export default function App() {
         <BottomSheetModalProvider>
           <SessionProvider>
             <Gate />
-            <StatusBar style="dark" />
           </SessionProvider>
         </BottomSheetModalProvider>
       </SafeAreaProvider>

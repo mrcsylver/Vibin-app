@@ -1,3 +1,4 @@
+export const APP_NAME = 'Vibin';
 export const APP_SCHEME = 'vibin';
 export const SPOTIFY_REDIRECT_PATH = 'spotify-auth';
 
@@ -24,6 +25,40 @@ export const COLORS = {
   blush: '#F8BBD0',
   fallbackAura: '#C5A3E8',
 } as const;
+
+/**
+ * 16-bit overworld palette. Kept deliberately small and flat — every tile is a
+ * hard-edged fill from this list, no gradients, so the map reads as pixel art.
+ */
+export const TILE_COLORS = {
+  deepWater: '#1B4A9C',
+  water: '#3A78D6',
+  waterFoam: '#8FC7F2',
+  sand: '#E8CE8B',
+  sandDark: '#CFB169',
+  grassLight: '#7BC86C',
+  grass: '#57AC4B',
+  grassDark: '#3C8A3D',
+  forest: '#2F7D4E',
+  treeLeaf: '#1F6B3B',
+  treeLeafHi: '#43A45F',
+  treeTrunk: '#6B4A2F',
+  stone: '#9A9AA8',
+  stoneDark: '#6E6E80',
+  stoneHi: '#C6C6D4',
+  path: '#C8A96E',
+  pathDark: '#A88A54',
+  flowerPink: '#F25C7A',
+  flowerGold: '#FFE066',
+  /** Bezel + ring ink so overlays stay legible on top of terrain. */
+  bezel: '#241C33',
+  ringInk: '#1B1430',
+  ringGold: '#FFD97A',
+  ringParchment: '#F6E4B8',
+} as const;
+
+/** Real-world feet covered by one map tile. 600 ft across / ~16 tiles. */
+export const TILE_FEET = 38;
 
 export const STATUS_PRESETS = [
   { id: 'studying', label: '📚 Studying' },

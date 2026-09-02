@@ -8,7 +8,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { COLORS } from '../utils/constants';
+import { COLORS, TILE_COLORS } from '../utils/constants';
 
 type Props = {
   uri: string;
@@ -89,7 +89,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 5,
+    // Hard dark outline: sprites have to stay legible on top of grass, stone
+    // and water alike, and it suits the pixel-art look.
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.9)',
+    borderColor: TILE_COLORS.bezel,
   },
 });

@@ -40,3 +40,14 @@ export type RadarPin = NearbyVibe & {
   y: number;
   distanceFt: number;
 };
+
+export type LikeTotals = {
+  /** Lifetime nudges received. Survives the 15-minute presence sweep. */
+  likesReceived: number;
+  /** Lifetime nudges sent. */
+  likesSent: number;
+  /** Nudges received inside the current live window. */
+  recentReceived: number;
+  /** When this listener was first counted, ISO-8601. */
+  firstSeenAt: string | null;
+};

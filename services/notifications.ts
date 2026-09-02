@@ -1,7 +1,8 @@
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { APP_NAME } from '../utils/constants';
 import { supabase } from './supabase';
+import { ensurePermissions, readPermissions } from './permissions';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -13,29 +14,24 @@ Notifications.setNotificationHandler({
 });
 
 export async function requestNotificationPermission(): Promise<boolean> {
-  const settings = await Notifications.getPermissionsAsync();
-  if (settings.granted || settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) {
-    return true;
-  }
-  const asked = await Notifications.requestPermissionsAsync();
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('likes', {
-      name: 'Track likes',
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  }
-  return asked.granted;
+  const state = await ensurePermissions();
+  return state.notifications;
 }
 
 export async function notifyIncomingLike(distanceFt: number): Promise<void> {
+  const { notifications } = await readPermissions();
+  if (!notifications) {
+    return;
+  }
+
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'LocalVibe',
+      title: APP_NAME,
       body: `Someone ${distanceFt} ft away liked your track!`,
       sound: true,
     },
     trigger: null,
-  });
+  }).catch(() => undefined);
 }
 
 /**

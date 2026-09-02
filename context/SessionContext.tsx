@@ -4,12 +4,24 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import type { NearbyVibe, NowPlaying, Profile } from '../types';
+import { AppState } from 'react-native';
+import type { LikeTotals, NearbyVibe, NowPlaying, Profile } from '../types';
+import { PRESENCE_POLL_MS } from '../utils/constants';
 import { loadProfile, saveProfile } from '../services/storage';
-import { syncHeartbeat } from '../services/locationEngine';
+import { startBackgroundLocation, syncHeartbeat } from '../services/locationEngine';
+import { EMPTY_LIKE_TOTALS, fetchAllTimeLikes } from '../services/likes';
+import { notifyIncomingLike, subscribeToLikes } from '../services/notifications';
+import { watchHeading, type HeadingSubscription } from '../services/heading';
+import {
+  ensurePermissions,
+  readPermissions,
+  UNKNOWN_PERMISSIONS,
+  type PermissionState,
+} from '../services/permissions';
 
 type SessionValue = {
   ready: boolean;
@@ -17,9 +29,15 @@ type SessionValue = {
   track: NowPlaying | null;
   nearby: NearbyVibe[];
   coords: { latitude: number; longitude: number } | null;
+  /** Compass heading in degrees clockwise from true north, null if unavailable. */
+  heading: number | null;
+  permissions: PermissionState;
+  likeTotals: LikeTotals;
   lastError: string | null;
   setProfile: (profile: Profile) => Promise<void>;
   refreshHeartbeat: () => Promise<void>;
+  refreshLikeTotals: () => Promise<void>;
+  requestPermissions: () => Promise<PermissionState>;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -30,11 +48,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<NowPlaying | null>(null);
   const [nearby, setNearby] = useState<NearbyVibe[]>([]);
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [heading, setHeading] = useState<number | null>(null);
+  const [permissions, setPermissions] = useState<PermissionState>(UNKNOWN_PERMISSIONS);
+  const [likeTotals, setLikeTotals] = useState<LikeTotals>(EMPTY_LIKE_TOTALS);
   const [lastError, setLastError] = useState<string | null>(null);
+
+  const hashedId = profile?.hashedId ?? null;
+  const canLocate = permissions.locationForeground;
 
   const persistProfile = useCallback(async (next: Profile) => {
     await saveProfile(next);
     setProfileState(next);
+  }, []);
+
+  const requestPermissions = useCallback(async () => {
+    const state = await ensurePermissions();
+    setPermissions(state);
+    return state;
   }, []);
 
   const refreshHeartbeat = useCallback(async () => {
@@ -43,7 +73,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!result) {
         return;
       }
-      setProfileState(result.profile);
       setTrack(result.track);
       setNearby(result.nearby);
       setCoords(result.coords);
@@ -53,19 +82,129 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshLikeTotals = useCallback(async () => {
+    if (!hashedId) {
+      return;
+    }
+    try {
+      setLikeTotals(await fetchAllTimeLikes(hashedId));
+    } catch {
+      // Keep the last known tally rather than flashing zeros.
+    }
+  }, [hashedId]);
+
+  // --- Boot -----------------------------------------------------------------
+  // A returning user goes straight to the radar, so their permissions have to be
+  // settled *before* anything asks the OS for a position. Skipping this is what
+  // produced DeniedForegroundLocationPermission on the radar screen.
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       const stored = await loadProfile();
-      if (!cancelled) {
-        setProfileState(stored);
-        setReady(true);
+      if (cancelled) {
+        return;
       }
+      setProfileState(stored);
+
+      // First-run users are prompted by the onboarding screen instead, once
+      // they know what the app is for — prompting cold gets you denied.
+      const state = stored ? await ensurePermissions() : await readPermissions();
+      if (cancelled) {
+        return;
+      }
+      setPermissions(state);
+      setReady(true);
     })();
+
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Grants can change while we are backgrounded (Settings round-trip).
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void readPermissions().then(setPermissions).catch(() => undefined);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // --- Presence heartbeat ---------------------------------------------------
+  // Keyed on hashedId, not the profile object: refreshHeartbeat must never be
+  // able to restart its own interval.
+  useEffect(() => {
+    if (!hashedId || !canLocate) {
+      return;
+    }
+
+    void refreshHeartbeat();
+    void startBackgroundLocation();
+
+    const timer = setInterval(() => {
+      void refreshHeartbeat();
+    }, PRESENCE_POLL_MS);
+
+    return () => clearInterval(timer);
+  }, [hashedId, canLocate, refreshHeartbeat]);
+
+  // --- Compass --------------------------------------------------------------
+  useEffect(() => {
+    if (!canLocate) {
+      setHeading(null);
+      return;
+    }
+
+    let cancelled = false;
+    let subscription: HeadingSubscription | null = null;
+
+    void watchHeading((degrees) => {
+      if (!cancelled) {
+        setHeading(degrees);
+      }
+    }).then((result) => {
+      if (cancelled) {
+        result?.remove();
+        return;
+      }
+      subscription = result;
+    });
+
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
+  }, [canLocate]);
+
+  // --- Likes ----------------------------------------------------------------
+  const likeTotalsRef = useRef(refreshLikeTotals);
+  likeTotalsRef.current = refreshLikeTotals;
+
+  useEffect(() => {
+    if (!hashedId) {
+      setLikeTotals(EMPTY_LIKE_TOTALS);
+      return;
+    }
+
+    void likeTotalsRef.current();
+
+    const channel = subscribeToLikes(hashedId, (distanceFt) => {
+      void notifyIncomingLike(distanceFt);
+      // Optimistic bump so the badge reacts instantly, then reconcile.
+      setLikeTotals((current) => ({
+        ...current,
+        likesReceived: current.likesReceived + 1,
+        recentReceived: current.recentReceived + 1,
+      }));
+      void likeTotalsRef.current();
+    });
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [hashedId]);
 
   const value = useMemo(
     () => ({
@@ -74,11 +213,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       track,
       nearby,
       coords,
+      heading,
+      permissions,
+      likeTotals,
       lastError,
       setProfile: persistProfile,
       refreshHeartbeat,
+      refreshLikeTotals,
+      requestPermissions,
     }),
-    [ready, profile, track, nearby, coords, lastError, persistProfile, refreshHeartbeat],
+    [
+      ready,
+      profile,
+      track,
+      nearby,
+      coords,
+      heading,
+      permissions,
+      likeTotals,
+      lastError,
+      persistProfile,
+      refreshHeartbeat,
+      refreshLikeTotals,
+      requestPermissions,
+    ],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

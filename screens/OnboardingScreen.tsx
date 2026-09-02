@@ -24,17 +24,12 @@ import {
   makeSpotifyRedirectUri,
   useSpotifyAuthRequest,
 } from '../services/spotify';
-import {
-  requestLocationPermissions,
-  startBackgroundLocation,
-} from '../services/locationEngine';
-import { requestNotificationPermission } from '../services/notifications';
 import type { DiceBearStyle } from '../types';
 import { buildAvatarUrl, randomSeed } from '../utils/avatar';
-import { COLORS } from '../utils/constants';
+import { APP_NAME, COLORS } from '../utils/constants';
 
 export function OnboardingScreen() {
-  const { setProfile } = useSession();
+  const { setProfile, requestPermissions } = useSession();
   const [username, setUsername] = useState('');
   const [styleId, setStyleId] = useState<DiceBearStyle>('adventurer');
   const [seed, setSeed] = useState('campus-star');
@@ -72,6 +67,12 @@ export function OnboardingScreen() {
       const me = await fetchSpotifyMe(tokens.accessToken);
       const hashedId = await hashSpotifyUserId(me.id);
 
+      // Location and notifications are requested BEFORE the profile is saved.
+      // Saving the profile is what swaps in the radar screen, and the radar
+      // immediately asks the OS for a position — doing it the other way round
+      // is what raised DeniedForegroundLocationPermission on first launch.
+      const granted = await requestPermissions();
+
       await setProfile({
         hashedId,
         username: username.trim().slice(0, 24),
@@ -81,17 +82,13 @@ export function OnboardingScreen() {
         status: '',
       });
 
-      const loc = await requestLocationPermissions();
-      if (!loc.foreground) {
-        throw new Error('Location permission is required to plot the 300 ft radar.');
+      // A denial is not a dead end: the radar shows its own "enable location"
+      // gate with a shortcut into Settings.
+      if (granted.locationForeground) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       }
-      await requestNotificationPermission();
-      if (loc.background) {
-        await startBackgroundLocation().catch(() => {
-          // Background tracking needs a dev/production build; foreground polling still works.
-        });
-      }
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect Spotify.');
     } finally {
@@ -105,7 +102,7 @@ export function OnboardingScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <Text style={styles.kicker}>CAMPUS AMBIENT MUSIC RADAR</Text>
-            <Text style={styles.title}>Welcome to LocalVibe</Text>
+            <Text style={styles.title}>Welcome to {APP_NAME}</Text>
             <Text style={styles.sub}>See what people around you are listening to in real time.</Text>
 
             <View style={styles.preview}>
@@ -145,7 +142,8 @@ export function OnboardingScreen() {
               )}
             </Pressable>
             <Text style={styles.hint}>
-              Presence is ephemeral — your pin vanishes after 15 minutes of quiet. No maps, no long-term PII.
+              Presence is ephemeral — your pin vanishes after 15 minutes of quiet. Nobody ever sees your
+              coordinates, only how far away and which way you are.
             </Text>
             <Text selectable style={styles.redirect}>
               Spotify redirect URI (paste into the Spotify Dashboard):{'\n'}

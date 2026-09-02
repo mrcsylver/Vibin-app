@@ -1,5 +1,5 @@
 -- =============================================================================
--- Vibin / LocalVibe — Supabase schema (PostgreSQL + PostGIS)
+-- Vibin — Supabase schema (PostgreSQL + PostGIS)
 -- Paste this entire file into the Supabase SQL Editor and run it once.
 -- =============================================================================
 
@@ -54,6 +54,20 @@ create index if not exists likes_to_created_idx
   on public.likes (to_spotify_id, created_at desc);
 
 alter table public.likes replica identity full;
+
+-- -----------------------------------------------------------------------------
+-- Durable like counters.
+-- `public.likes` is swept every 15 minutes along with presence, so it can only
+-- ever answer "who nudged me just now". This table is the permanent tally that
+-- backs the All-Time Likes screen; it is incremented inside insert_like().
+-- -----------------------------------------------------------------------------
+create table if not exists public.like_totals (
+  spotify_id text primary key,
+  likes_received bigint not null default 0,
+  likes_sent bigint not null default 0,
+  first_seen_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 -- -----------------------------------------------------------------------------
 -- 15-minute expiry (used by both the write trigger and pg_cron)
@@ -261,8 +275,48 @@ begin
   values (p_from_spotify_id, p_to_spotify_id, greatest(p_distance_ft, 0))
   returning id into new_id;
 
+  -- Permanent tallies. These outlive the 15-minute sweep above.
+  insert into public.like_totals (spotify_id, likes_received)
+  values (p_to_spotify_id, 1)
+  on conflict (spotify_id) do update set
+    likes_received = public.like_totals.likes_received + 1,
+    updated_at = now();
+
+  insert into public.like_totals (spotify_id, likes_sent)
+  values (p_from_spotify_id, 1)
+  on conflict (spotify_id) do update set
+    likes_sent = public.like_totals.likes_sent + 1,
+    updated_at = now();
+
   return new_id;
 end;
+$$;
+
+-- Read model for the All-Time Likes screen. `recent_received` is the live
+-- 15-minute window; the two totals are lifetime counts.
+create or replace function public.all_time_likes(p_spotify_id text)
+returns table (
+  likes_received bigint,
+  likes_sent bigint,
+  recent_received bigint,
+  first_seen_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    coalesce(t.likes_received, 0)::bigint,
+    coalesce(t.likes_sent, 0)::bigint,
+    (
+      select count(*)
+      from public.likes l
+      where l.to_spotify_id = p_spotify_id
+    )::bigint,
+    coalesce(t.first_seen_at, now())
+  from (select 1) as anchor
+  left join public.like_totals t on t.spotify_id = p_spotify_id;
 $$;
 
 -- -----------------------------------------------------------------------------
@@ -270,9 +324,11 @@ $$;
 -- -----------------------------------------------------------------------------
 alter table public.active_users enable row level security;
 alter table public.likes enable row level security;
+alter table public.like_totals enable row level security;
 
 revoke all on public.active_users from anon, authenticated;
 revoke all on public.likes from anon, authenticated;
+revoke all on public.like_totals from anon, authenticated;
 
 grant execute on function public.upsert_presence(
   text, text, text, text, text, text, text, text, double precision, double precision
@@ -285,6 +341,8 @@ grant execute on function public.nearby_users(
 ) to anon, authenticated;
 
 grant execute on function public.insert_like(text, text, integer) to anon, authenticated;
+
+grant execute on function public.all_time_likes(text) to anon, authenticated;
 
 grant execute on function public.expire_stale_presence() to postgres;
 
