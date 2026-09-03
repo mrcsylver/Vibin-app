@@ -289,6 +289,16 @@ Apple always asks why an app needs location in the background. Paste this:
 
 ---
 
+## Changing the share card
+
+The card lives in `components/VibeCard.tsx`. Sizes are all ratios of one number
+(`DESIGN_WIDTH = 390`) via the `s()` helper, so changing a value keeps its
+proportion on every screen size. Layout is flex, not fixed offsets, which is why
+a long track title pushes the rows below it instead of overlapping them.
+
+The two pixel typefaces live in `assets/fonts/` and are loaded in `App.tsx`.
+Both are SIL Open Font Licence, which permits commercial use.
+
 ## For a developer (technical reference)
 
 - `app.json` holds static config; `app.config.js` layers on the two things that

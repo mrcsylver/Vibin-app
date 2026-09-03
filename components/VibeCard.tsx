@@ -1,128 +1,183 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { APP_NAME, COLORS, TILE_COLORS } from '../utils/constants';
+import { APP_NAME, COLORS, FONTS, TILE_COLORS } from '../utils/constants';
 import { RetroMap } from './RetroMap';
 import type { NowPlaying, Profile } from '../types';
 
-/** Story aspect ratio, so it drops into Instagram or Snapchat uncropped. */
-export const CARD_WIDTH = 324;
-export const CARD_HEIGHT = 576;
+/** The design was drawn at this width; every size below is a ratio of it. */
+const DESIGN_WIDTH = 390;
+export const CARD_ASPECT = 9 / 16;
 
-/**
- * The overworld disc sits behind the artwork only. Sizing it so the disc ends
- * above the track title keeps every line of text on flat colour, where it is
- * always legible, instead of over terrain.
- */
-const MAP_SIZE = Math.round(CARD_WIDTH * 1.3);
-const MAP_LEFT = Math.round((CARD_WIDTH - MAP_SIZE) / 2);
-const MAP_TOP = -Math.round(CARD_WIDTH * 0.3);
-
-type Props = {
+export type VibeCardProps = {
+  /** Rendered width. Height follows the 9:16 story ratio. */
+  width: number;
   profile: Profile;
   track: NowPlaying | null;
   coords: { latitude: number; longitude: number } | null;
+  /** Listeners currently inside the 300 ft bubble, excluding the user. */
+  nearbyCount: number;
+  /** How many of them are on this exact track. */
+  sameTrackCount: number;
   /** Fired once the album art has painted, so the capture is never blank. */
   onArtSettled?: () => void;
 };
 
-function Bars() {
-  return (
-    <View style={styles.bars}>
-      <View style={[styles.bar, { height: 7 }]} />
-      <View style={[styles.bar, { height: 15 }]} />
-      <View style={[styles.bar, { height: 10 }]} />
-      <View style={[styles.bar, { height: 5 }]} />
-    </View>
-  );
-}
-
 /**
  * The shareable "now playing" card.
  *
- * Deliberately self-contained and fixed-size: it is rendered on screen for the
- * user to approve and then handed straight to `captureRef`, so what they see is
- * exactly the pixels that get shared.
+ * Laid out with flex rather than absolute offsets, so a two-line track title or
+ * a long username pushes the rows below it instead of colliding with them. The
+ * album frame overlaps the map disc with a negative margin, which keeps that
+ * one deliberate overlap without giving up automatic layout.
  */
-export function VibeCard({ profile, track, coords, onArtSettled }: Props) {
+export function VibeCard({
+  width,
+  profile,
+  track,
+  coords,
+  nearbyCount,
+  sameTrackCount,
+  onArtSettled,
+}: VibeCardProps) {
+  const s = (value: number) => Math.round(value * (width / DESIGN_WIDTH));
+  const height = Math.round(width / CARD_ASPECT);
+
   const hasTrack = Boolean(track?.title);
   const artUrl = track?.albumArtUrl ?? null;
-  const aura = track?.albumColor ?? COLORS.fallbackAura;
+  const glow = track?.albumColor ?? COLORS.fallbackAura;
+
+  const mapSize = s(288);
+  const albumInner = s(150);
+  const albumBorder = s(8);
+  const albumEdge = s(3);
+  const albumOuter = albumInner + albumBorder * 2 + albumEdge * 2;
+
+  const status = profile.status.trim();
 
   return (
-    <View style={styles.card}>
-      {/* The same overworld the radar draws, dimmed to a backdrop. */}
-      <View style={styles.mapLayer} pointerEvents="none">
-        <RetroMap size={MAP_SIZE} coords={coords} tilesAcross={12} />
+    <View style={[styles.card, { width, height, borderWidth: s(3) }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingHorizontal: s(18), paddingTop: s(16) }]}>
+        <View style={styles.wordmark}>
+          <View style={[styles.mark, { width: s(18), height: s(18) }]}>
+            <Text style={[styles.markText, { fontSize: s(9) }]}>V</Text>
+          </View>
+          <Text style={[styles.brand, { fontSize: s(13), letterSpacing: s(2) }]}>
+            {APP_NAME.toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.live}>
+          <View style={[styles.liveDot, { width: s(6), height: s(6) }]} />
+          <Text style={[styles.liveText, { fontSize: s(6) }]}>LIVE</Text>
+        </View>
       </View>
-      <View style={styles.scrim} pointerEvents="none" />
 
-      <View style={styles.header}>
-        <Bars />
-        <Text style={styles.wordmark}>{APP_NAME.toUpperCase()}</Text>
-      </View>
-
-      <View style={styles.artWrap}>
-        <View style={[styles.artFrame, { shadowColor: aura, borderColor: aura }]}>
+      {/* Map disc with the album frame overlapping its lower edge */}
+      <View style={[styles.stage, { marginTop: s(10) }]}>
+        <RetroMap size={mapSize} coords={coords} tilesAcross={11} />
+        <View
+          style={[
+            styles.albumFrame,
+            {
+              marginTop: -albumOuter / 2,
+              padding: albumBorder,
+              borderColor: glow,
+              borderWidth: albumEdge,
+              shadowColor: glow,
+              shadowRadius: s(16),
+            },
+          ]}
+        >
           {artUrl ? (
             <Image
               source={{ uri: artUrl }}
-              style={styles.art}
+              style={{ width: albumInner, height: albumInner }}
               contentFit="cover"
               onLoadEnd={onArtSettled}
             />
           ) : (
-            <View style={[styles.art, styles.artFallback]}>
-              <Image source={{ uri: profile.avatarUrl }} style={styles.artAvatar} />
+            <View
+              style={[
+                styles.artFallback,
+                { width: albumInner, height: albumInner },
+              ]}
+            >
+              <Image
+                source={{ uri: profile.avatarUrl }}
+                style={{ width: albumInner * 0.62, height: albumInner * 0.62 }}
+              />
             </View>
           )}
         </View>
       </View>
 
-      <View style={styles.meta}>
-        {hasTrack ? (
-          <>
-            <Text style={styles.eyebrow}>NOW PLAYING</Text>
-            <Text style={styles.title} numberOfLines={2}>
-              {track?.title}
+      {/* Track */}
+      <View style={[styles.trackBlock, { paddingHorizontal: s(20), marginTop: s(12) }]}>
+        <Text
+          style={[styles.title, { fontSize: s(38), lineHeight: s(40) }]}
+          numberOfLines={2}
+        >
+          {hasTrack ? track?.title : status || 'Somewhere on campus'}
+        </Text>
+
+        <View style={[styles.artistRow, { marginTop: s(4), gap: s(9) }]}>
+          <Text style={[styles.artist, { fontSize: s(24), lineHeight: s(26) }]} numberOfLines={1}>
+            {hasTrack ? track?.artist ?? profile.username : 'Not on Spotify right now'}
+          </Text>
+          {hasTrack && track?.albumName ? (
+            <Text style={[styles.album, { fontSize: s(6) }]} numberOfLines={1}>
+              {track.albumName}
             </Text>
-            {track?.artist ? (
-              <Text style={styles.artist} numberOfLines={1}>
-                {track.artist}
-              </Text>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Text style={styles.eyebrow}>ON THE RADAR</Text>
-            <Text style={styles.title} numberOfLines={2}>
-              {profile.status.trim() || 'Somewhere on campus'}
-            </Text>
-            <Text style={styles.artist}>Not sharing a track right now</Text>
-          </>
-        )}
+          ) : null}
+        </View>
       </View>
 
-      <View style={styles.footer}>
-        <View style={styles.who}>
-          <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
-          <View style={styles.whoText}>
-            <Text style={styles.username} numberOfLines={1}>
-              {profile.username || 'listener'}
+      {/* Social proof — the line that makes someone ask what the app is */}
+      <View style={[styles.badgeRow, { marginTop: s(12) }]}>
+        <View style={[styles.badge, { paddingHorizontal: s(9), paddingVertical: s(6), borderWidth: s(2) }]}>
+          <View style={[styles.badgeDot, { width: s(6), height: s(6) }]} />
+          <Text style={[styles.badgeText, { fontSize: s(6) }]}>
+            {nearbyCount === 0
+              ? 'FIRST ONE HERE'
+              : sameTrackCount > 0
+                ? `${sameTrackCount} NEARBY ON THIS TRACK`
+                : `${nearbyCount} VIBING WITHIN 300 FT`}
+          </Text>
+        </View>
+      </View>
+
+      {/* User */}
+      <View style={[styles.footer, { paddingHorizontal: s(20), paddingBottom: s(18) }]}>
+        <View style={[styles.rule, { marginBottom: s(14) }]} />
+        <View style={[styles.userRow, { gap: s(11) }]}>
+          <Image
+            source={{ uri: profile.avatarUrl }}
+            style={{
+              width: s(46),
+              height: s(46),
+              borderWidth: s(3),
+              borderColor: glow,
+              backgroundColor: COLORS.parchment,
+            }}
+          />
+          <View style={styles.userText}>
+            <Text style={[styles.handle, { fontSize: s(8), color: glow }]} numberOfLines={1}>
+              @{profile.username || 'listener'}
             </Text>
-            {hasTrack && profile.status.trim() ? (
-              <Text style={styles.status} numberOfLines={1}>
-                {profile.status.trim()}
-              </Text>
-            ) : (
-              <Text style={styles.status}>300 ft music radar</Text>
-            )}
+            <Text style={[styles.status, { fontSize: s(19), lineHeight: s(21), marginTop: s(4) }]} numberOfLines={1}>
+              {status || 'Somewhere within 300 ft'}
+            </Text>
           </View>
         </View>
+
         {/* Spotify's developer terms require attribution wherever their album
-            art and track metadata are displayed — and this card gets posted. */}
-        <Text style={styles.tagline}>
-          {hasTrack ? 'Now playing on Spotify' : 'See what everyone near you is playing'}
-        </Text>
+            art and track metadata are shown — and this card gets posted. */}
+        <View style={[styles.spotify, { marginTop: s(12), gap: s(6) }]}>
+          <View style={[styles.spotifyDot, { width: s(7), height: s(7) }]} />
+          <Text style={[styles.spotifyText, { fontSize: s(6) }]}>
+            {hasTrack ? 'NOW PLAYING ON SPOTIFY' : 'VIBIN · 300 FT MUSIC RADAR'}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -130,137 +185,132 @@ export function VibeCard({ profile, track, coords, onArtSettled }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
     backgroundColor: TILE_COLORS.bezel,
-    borderWidth: 3,
     borderColor: TILE_COLORS.ringGold,
-    borderRadius: 6,
     overflow: 'hidden',
-    justifyContent: 'space-between',
-  },
-  mapLayer: {
-    position: 'absolute',
-    top: MAP_TOP,
-    left: MAP_LEFT,
-    opacity: 0.85,
-  },
-  scrim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(27, 20, 48, 0.55)',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  bars: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-    height: 15,
-  },
-  bar: {
-    width: 3,
-    backgroundColor: TILE_COLORS.ringGold,
+    justifyContent: 'space-between',
   },
   wordmark: {
-    color: TILE_COLORS.ringGold,
-    fontWeight: '900',
-    fontSize: 13,
-    letterSpacing: 3.5,
-  },
-  artWrap: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 7,
   },
-  artFrame: {
-    padding: 5,
-    borderWidth: 3,
-    backgroundColor: 'rgba(27, 20, 48, 0.85)',
-    shadowOpacity: 0.75,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  art: {
-    width: 186,
-    height: 186,
-    backgroundColor: TILE_COLORS.bezel,
-  },
-  artFallback: {
+  mark: {
+    backgroundColor: TILE_COLORS.ringGold,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  artAvatar: {
-    width: 116,
-    height: 116,
-    borderRadius: 10,
+  markText: {
+    fontFamily: FONTS.pixel,
+    color: TILE_COLORS.bezel,
   },
-  meta: {
-    paddingHorizontal: 22,
-  },
-  eyebrow: {
+  brand: {
+    fontFamily: FONTS.pixel,
     color: TILE_COLORS.ringGold,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2.5,
-    marginBottom: 6,
   },
-  title: {
-    color: TILE_COLORS.ringParchment,
-    fontSize: 26,
-    lineHeight: 30,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  artist: {
-    marginTop: 5,
-    color: 'rgba(246, 228, 184, 0.72)',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  footer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 12,
-  },
-  who: {
+  live: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(246, 228, 184, 0.22)',
+    gap: 5,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: TILE_COLORS.ringGold,
-    backgroundColor: COLORS.parchment,
+  liveDot: {
+    backgroundColor: '#E05A5A',
   },
-  whoText: {
-    flex: 1,
+  liveText: {
+    fontFamily: FONTS.pixel,
+    color: '#E05A5A',
   },
-  username: {
+  stage: {
+    alignItems: 'center',
+  },
+  albumFrame: {
+    backgroundColor: TILE_COLORS.bezel,
+    shadowOpacity: 0.85,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
+  },
+  artFallback: {
+    backgroundColor: '#322646',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackBlock: {
+    alignItems: 'center',
+  },
+  title: {
+    fontFamily: FONTS.terminal,
     color: TILE_COLORS.ringParchment,
-    fontSize: 15,
-    fontWeight: '800',
+    textAlign: 'center',
+  },
+  artistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  artist: {
+    fontFamily: FONTS.terminal,
+    color: TILE_COLORS.stone,
+    flexShrink: 1,
+  },
+  album: {
+    fontFamily: FONTS.pixel,
+    color: 'rgba(154, 154, 168, 0.72)',
+    flexShrink: 1,
+  },
+  badgeRow: {
+    alignItems: 'center',
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderColor: 'rgba(255, 217, 122, 0.5)',
+    backgroundColor: 'rgba(255, 217, 122, 0.1)',
+  },
+  badgeDot: {
+    backgroundColor: TILE_COLORS.ringGold,
+  },
+  badgeText: {
+    fontFamily: FONTS.pixel,
+    color: TILE_COLORS.ringGold,
+  },
+  footer: {
+    marginTop: 'auto',
+  },
+  rule: {
+    height: 2,
+    backgroundColor: 'rgba(154, 154, 168, 0.28)',
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  userText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  handle: {
+    fontFamily: FONTS.pixel,
   },
   status: {
-    color: 'rgba(246, 228, 184, 0.6)',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 1,
+    fontFamily: FONTS.terminal,
+    color: TILE_COLORS.ringParchment,
   },
-  tagline: {
-    color: 'rgba(246, 228, 184, 0.45)',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
+  spotify: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  spotifyDot: {
+    backgroundColor: '#1DB954',
+    borderRadius: 999,
+  },
+  spotifyText: {
+    fontFamily: FONTS.pixel,
+    color: 'rgba(154, 154, 168, 0.85)',
   },
 });

@@ -19,7 +19,7 @@ import { StatusComposer } from '../components/StatusComposer';
 import { ProfileModal } from '../components/ProfileModal';
 import { ShareVibeModal } from '../components/ShareVibeModal';
 import { useSession } from '../context/SessionContext';
-import { APP_NAME, COLORS, TILE_COLORS } from '../utils/constants';
+import { APP_NAME, COLORS, FONTS, TILE_COLORS } from '../utils/constants';
 import { metersToFeet } from '../utils/geo';
 import { describePlayback } from '../utils/nowPlaying';
 import { pushStatus, sendLike } from '../services/presence';
@@ -191,6 +191,7 @@ export function RadarScreen() {
         visible={shareOpen}
         profile={profile}
         track={track}
+        nearby={nearby}
         coords={coords}
         onClose={() => setShareOpen(false)}
       />
@@ -223,10 +224,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   kicker: {
+    // Same pixel face as the wordmark on the share card, so the two read as
+    // one brand. Falls back to the system font if the face failed to load.
+    fontFamily: FONTS.pixel,
     color: TILE_COLORS.ringGold,
-    fontWeight: '800',
     letterSpacing: 2,
-    fontSize: 11,
+    fontSize: 10,
   },
   title: {
     fontSize: 28,

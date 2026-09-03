@@ -57,6 +57,17 @@ export const TILE_COLORS = {
   ringParchment: '#F6E4B8',
 } as const;
 
+/**
+ * Bundled pixel faces, loaded in App.tsx. The keys are ours, so `fontFamily`
+ * resolves identically on iOS and Android. Both are SIL Open Font License.
+ */
+export const FONTS = {
+  /** Blocky 8-bit face. Legible only in short, all-caps runs. */
+  pixel: 'PressStart2P',
+  /** Tall terminal face. Carries the long strings — titles, status lines. */
+  terminal: 'VT323',
+} as const;
+
 /** Real-world feet covered by one map tile. 600 ft across / ~16 tiles. */
 export const TILE_FEET = 38;
 

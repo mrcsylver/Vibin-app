@@ -4,6 +4,7 @@ import './services/backgroundLocationTask';
 
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -14,7 +15,14 @@ import { COLORS } from './utils/constants';
 
 function Gate() {
   const { ready, profile } = useSession();
-  if (!ready) {
+  const [fontsLoaded, fontError] = useFonts({
+    PressStart2P: require('./assets/fonts/PressStart2P-Regular.ttf'),
+    VT323: require('./assets/fonts/VT323-Regular.ttf'),
+  });
+
+  // A font that fails to load must never brick the app — fall through to the
+  // system face instead of holding the boot screen forever.
+  if (!ready || (!fontsLoaded && !fontError)) {
     return (
       <View style={styles.boot}>
         <ActivityIndicator color={COLORS.cta} />

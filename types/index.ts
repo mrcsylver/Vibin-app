@@ -37,6 +37,8 @@ export type NowPlaying = {
   state: NowPlayingState;
   title: string | null;
   artist: string | null;
+  /** Album name for a track, podcast show for an episode. Null when unknown. */
+  albumName: string | null;
   albumArtUrl: string | null;
   albumColor: string | null;
 };
