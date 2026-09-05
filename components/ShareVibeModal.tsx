@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -40,14 +40,6 @@ export function ShareVibeModal({ visible, profile, track, nearby, coords, onClos
   const cardWidth = Math.round(
     Math.min(340, screenWidth - 48, (screenHeight - CHROME_HEIGHT) * CARD_ASPECT),
   );
-
-  const sameTrackCount = useMemo(() => {
-    const title = track?.title;
-    if (!title) {
-      return 0;
-    }
-    return nearby.filter((vibe) => vibe.track_title === title).length;
-  }, [nearby, track?.title]);
 
   const needsArt = Boolean(track?.albumArtUrl);
 
@@ -98,7 +90,6 @@ export function ShareVibeModal({ visible, profile, track, nearby, coords, onClos
             track={track}
             coords={coords}
             nearbyCount={nearby.length}
-            sameTrackCount={sameTrackCount}
             onArtSettled={() => setReady(true)}
           />
         </View>

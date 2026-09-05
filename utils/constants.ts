@@ -64,8 +64,10 @@ export const TILE_COLORS = {
 export const FONTS = {
   /** Blocky 8-bit face. Legible only in short, all-caps runs. */
   pixel: 'PressStart2P',
-  /** Tall terminal face. Carries the long strings — titles, status lines. */
-  terminal: 'VT323',
+  /** Editorial serif. Carries the track title on the share card. */
+  serif: 'InstrumentSerif',
+  /** Mono for labels, counters and timestamps. */
+  mono: 'IBMPlexMono',
 } as const;
 
 /** Real-world feet covered by one map tile. 600 ft across / ~16 tiles. */

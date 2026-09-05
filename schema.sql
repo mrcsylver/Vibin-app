@@ -319,6 +319,27 @@ as $$
   left join public.like_totals t on t.spotify_id = p_spotify_id;
 $$;
 
+-- Account deletion. App Store guideline 5.1.1(v) requires an in-app way to
+-- erase everything an account created, so this drops presence, both sides of
+-- the like history, and the lifetime tallies in one call.
+create or replace function public.delete_my_data(p_spotify_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_spotify_id is null or length(p_spotify_id) < 16 then
+    raise exception 'invalid presence id';
+  end if;
+
+  delete from public.active_users where spotify_id = p_spotify_id;
+  delete from public.likes
+    where from_spotify_id = p_spotify_id or to_spotify_id = p_spotify_id;
+  delete from public.like_totals where spotify_id = p_spotify_id;
+end;
+$$;
+
 -- -----------------------------------------------------------------------------
 -- Lock tables; grant execute on RPCs to the anonymous (and authenticated) roles.
 -- -----------------------------------------------------------------------------
@@ -343,6 +364,8 @@ grant execute on function public.nearby_users(
 grant execute on function public.insert_like(text, text, integer) to anon, authenticated;
 
 grant execute on function public.all_time_likes(text) to anon, authenticated;
+
+grant execute on function public.delete_my_data(text) to anon, authenticated;
 
 grant execute on function public.expire_stale_presence() to postgres;
 

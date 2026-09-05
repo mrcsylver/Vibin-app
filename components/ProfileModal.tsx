@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -24,6 +25,7 @@ type Props = {
   onRefresh: () => Promise<void>;
   onRequestPermissions: () => Promise<unknown>;
   onOpenSettings: () => Promise<void>;
+  onDeleteAccount: () => Promise<void>;
   onClose: () => void;
 };
 
@@ -94,9 +96,11 @@ export function ProfileModal({
   onRefresh,
   onRequestPermissions,
   onOpenSettings,
+  onDeleteAccount,
   onClose,
 }: Props) {
   const [refreshing, setRefreshing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const playback = describePlayback(track);
 
   const refresh = async () => {
@@ -106,6 +110,25 @@ export function ProfileModal({
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete your Vibin data?',
+      'This removes your pin, your like history and your all-time totals from the server, ' +
+        'and signs you out on this device. It cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setDeleting(true);
+            void onDeleteAccount().finally(() => setDeleting(false));
+          },
+        },
+      ],
+    );
   };
 
   const locationDetail = !permissions.servicesEnabled
@@ -209,6 +232,23 @@ export function ProfileModal({
                 }
               }}
             />
+
+            <Text style={styles.sectionTitle}>Your data</Text>
+            <Pressable
+              onPress={confirmDelete}
+              disabled={deleting}
+              style={[styles.danger, deleting && styles.dim]}
+            >
+              {deleting ? (
+                <ActivityIndicator color="#FF8A80" />
+              ) : (
+                <Text style={styles.dangerText}>Delete my data and sign out</Text>
+              )}
+            </Pressable>
+            <Text style={styles.dangerHint}>
+              Removes your pin, likes and totals from the server. Your Spotify account is not
+              affected.
+            </Text>
 
             <View style={styles.legal}>
               <LegalLinks tone="dark" />
@@ -414,6 +454,25 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '800',
     fontSize: 12,
+  },
+  danger: {
+    paddingVertical: 13,
+    borderRadius: 6,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 138, 128, 0.6)',
+  },
+  dangerText: {
+    color: '#FF8A80',
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  dangerHint: {
+    marginTop: 8,
+    color: 'rgba(246, 228, 184, 0.5)',
+    fontSize: 11.5,
+    lineHeight: 16,
+    fontWeight: '600',
   },
   legal: {
     marginTop: 26,

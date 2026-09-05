@@ -4,6 +4,7 @@ export type SpotifyImage = { url?: string };
 
 export type SpotifyPlayingJson = {
   is_playing?: boolean;
+  progress_ms?: number | null;
   currently_playing_type?: 'track' | 'episode' | 'ad' | 'unknown';
   item?: {
     name?: string;
@@ -13,11 +14,21 @@ export type SpotifyPlayingJson = {
     /** Episodes carry their own artwork and a parent show instead of an album. */
     images?: SpotifyImage[];
     show?: { name?: string; images?: SpotifyImage[] };
+    duration_ms?: number | null;
   } | null;
 };
 
 export function nothingPlaying(state: NowPlayingState): NowPlaying {
-  return { state, title: null, artist: null, albumName: null, albumArtUrl: null, albumColor: null };
+  return {
+    state,
+    title: null,
+    artist: null,
+    albumName: null,
+    albumArtUrl: null,
+    albumColor: null,
+    progressMs: null,
+    durationMs: null,
+  };
 }
 
 function firstImage(...groups: (SpotifyImage[] | undefined)[]): string | null {
@@ -75,6 +86,8 @@ export function interpretPlayback(status: number, json: SpotifyPlayingJson | nul
     albumName: isEpisode ? item.show?.name?.trim() || null : item.album?.name?.trim() || null,
     albumArtUrl: firstImage(item.album?.images, item.images, item.show?.images),
     albumColor: null,
+    progressMs: typeof json.progress_ms === 'number' ? json.progress_ms : null,
+    durationMs: typeof item.duration_ms === 'number' ? item.duration_ms : null,
   };
 }
 

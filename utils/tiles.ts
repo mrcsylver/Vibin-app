@@ -224,7 +224,8 @@ export type TileWindow = {
  */
 export function tileWindowFor(
   coords: { latitude: number; longitude: number } | null,
-  tilesAcross: number,
+  tilesWide: number,
+  tilesDown: number = tilesWide,
 ): TileWindow {
   if (!coords) {
     return { originTx: 0, originTy: 0, fractionX: 0, fractionY: 0 };
@@ -234,24 +235,26 @@ export function tileWindowFor(
   const worldX = (coords.longitude * metersPerDegLng) / METERS_PER_TILE;
   const worldY = -(coords.latitude * METERS_PER_DEG_LAT) / METERS_PER_TILE;
 
-  // Centre the viewport on the user.
-  const half = tilesAcross / 2;
-  const leftEdge = worldX - half;
-  const topEdge = worldY - half;
+  // Centre the viewport on the user, in each axis independently so a tall
+  // phone screen stays centred rather than anchored to a square.
+  const leftEdge = worldX - tilesWide / 2;
+  const topEdge = worldY - tilesDown / 2;
 
   const originTx = Math.floor(leftEdge);
   const originTy = Math.floor(topEdge);
 
   // Snap the scroll offset to whole sprite pixels. GPS jitter then stops
   // rebuilding the map every heartbeat, and the pixel grid stays aligned.
+  // Snapping can round a fraction up to exactly 1, which is really the next
+  // tile over, so carry it into the origin and keep the fraction in [0, 1).
   const snap = (value: number) => Math.round(value * TILE_PX) / TILE_PX;
+  const carry = (origin: number, fraction: number): [number, number] =>
+    fraction >= 1 ? [origin + 1, fraction - 1] : [origin, fraction];
 
-  return {
-    originTx,
-    originTy,
-    fractionX: snap(leftEdge - originTx),
-    fractionY: snap(topEdge - originTy),
-  };
+  const [tx, fractionX] = carry(originTx, snap(leftEdge - originTx));
+  const [ty, fractionY] = carry(originTy, snap(topEdge - originTy));
+
+  return { originTx: tx, originTy: ty, fractionX, fractionY };
 }
 
 // -----------------------------------------------------------------------------
@@ -282,13 +285,15 @@ function flatten(bucket: Map<string, string[]>): MapLayer[] {
 }
 
 /**
- * Flatten the visible tile grid into one `<Path>` per colour. A 17x17 window is
- * ~1200 sprite rectangles; emitting them individually would choke react-native-svg,
- * while merging by fill keeps the whole map under twenty nodes.
+ * Flatten the visible tile grid into one `<Path>` per colour. A full-screen
+ * window is a couple of thousand sprite rectangles; emitting them individually
+ * would choke react-native-svg, while merging by fill keeps the whole map under
+ * twenty nodes.
  */
 export function buildMapLayers(
   window: TileWindow,
-  tilesAcross: number,
+  tilesWide: number,
+  tilesDown: number,
   tileSize: number,
 ): MapLayer[] {
   const unit = tileSize / TILE_PX;
@@ -298,8 +303,8 @@ export function buildMapLayers(
   // Overdraw a hair so neighbouring fills never show a seam.
   const bleed = 0.75;
 
-  for (let j = 0; j <= tilesAcross; j += 1) {
-    for (let i = 0; i <= tilesAcross; i += 1) {
+  for (let j = 0; j <= tilesDown; j += 1) {
+    for (let i = 0; i <= tilesWide; i += 1) {
       const tile = buildTile(window.originTx + i, window.originTy + j);
       const left = (i - window.fractionX) * tileSize;
       const top = (j - window.fractionY) * tileSize;

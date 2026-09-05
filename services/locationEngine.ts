@@ -76,6 +76,42 @@ export async function syncHeartbeat(coords?: {
   return { coords: position, track, nearby, profile };
 }
 
+export type PositionSubscription = { remove: () => void };
+
+/**
+ * Stream position updates for the map.
+ *
+ * Presence still goes out on the one-minute heartbeat — this is only so the
+ * ground scrolls under the user as they walk instead of jumping once a minute.
+ */
+export async function watchPosition(
+  onPosition: (coords: { latitude: number; longitude: number }) => void,
+): Promise<PositionSubscription | null> {
+  const permissions = await readPermissions();
+  if (!permissions.locationForeground || !permissions.servicesEnabled) {
+    return null;
+  }
+
+  try {
+    const subscription = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 3,
+        timeInterval: 4_000,
+      },
+      (position) => {
+        onPosition({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+    );
+    return { remove: () => subscription.remove() };
+  } catch {
+    return null;
+  }
+}
+
 export async function requestLocationPermissions(): Promise<{
   foreground: boolean;
   background: boolean;

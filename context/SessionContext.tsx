@@ -11,10 +11,17 @@ import {
 import { AppState } from 'react-native';
 import type { LikeTotals, NearbyVibe, NowPlaying, Profile } from '../types';
 import { PRESENCE_POLL_MS } from '../utils/constants';
-import { loadProfile, saveProfile } from '../services/storage';
-import { startBackgroundLocation, syncHeartbeat } from '../services/locationEngine';
+import { clearSession, loadProfile, saveProfile } from '../services/storage';
+import {
+  startBackgroundLocation,
+  stopBackgroundLocation,
+  syncHeartbeat,
+  watchPosition,
+  type PositionSubscription,
+} from '../services/locationEngine';
 import { EMPTY_LIKE_TOTALS, fetchAllTimeLikes } from '../services/likes';
 import { notifyIncomingLike, subscribeToLikes } from '../services/notifications';
+import { deleteMyData } from '../services/presence';
 import { watchHeading, type HeadingSubscription } from '../services/heading';
 import {
   ensurePermissions,
@@ -38,6 +45,8 @@ type SessionValue = {
   refreshHeartbeat: () => Promise<void>;
   refreshLikeTotals: () => Promise<void>;
   requestPermissions: () => Promise<PermissionState>;
+  /** Erase server-side data, drop local credentials, return to onboarding. */
+  deleteAccount: () => Promise<void>;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -65,6 +74,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const state = await ensurePermissions();
     setPermissions(state);
     return state;
+  }, []);
+
+  const deleteAccount = useCallback(async () => {
+    const current = await loadProfile();
+    if (current) {
+      // Best effort: local credentials are cleared either way, so a network
+      // failure can never strand the user in a signed-in state.
+      await deleteMyData(current.hashedId).catch(() => undefined);
+    }
+    await stopBackgroundLocation().catch(() => undefined);
+    await clearSession();
+    setProfileState(null);
+    setTrack(null);
+    setNearby([]);
+    setLikeTotals(EMPTY_LIKE_TOTALS);
   }, []);
 
   const refreshHeartbeat = useCallback(async () => {
@@ -122,15 +146,48 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Grants can change while we are backgrounded (Settings round-trip).
+  // Grants can change while we are backgrounded (Settings round-trip), and a
+  // user coming back from Spotify expects the track to be current immediately
+  // rather than up to a minute later.
+  const heartbeatRef = useRef(refreshHeartbeat);
+  heartbeatRef.current = refreshHeartbeat;
+
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (next) => {
       if (next === 'active') {
         void readPermissions().then(setPermissions).catch(() => undefined);
+        void heartbeatRef.current();
       }
     });
     return () => subscription.remove();
   }, []);
+
+  // Live position for the map. Presence stays on the one-minute heartbeat.
+  useEffect(() => {
+    if (!canLocate) {
+      return;
+    }
+
+    let cancelled = false;
+    let subscription: PositionSubscription | null = null;
+
+    void watchPosition((next) => {
+      if (!cancelled) {
+        setCoords(next);
+      }
+    }).then((result) => {
+      if (cancelled) {
+        result?.remove();
+        return;
+      }
+      subscription = result;
+    });
+
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
+  }, [canLocate]);
 
   // --- Presence heartbeat ---------------------------------------------------
   // Keyed on hashedId, not the profile object: refreshHeartbeat must never be
@@ -221,6 +278,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       refreshHeartbeat,
       refreshLikeTotals,
       requestPermissions,
+      deleteAccount,
     }),
     [
       ready,
@@ -236,6 +294,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       refreshHeartbeat,
       refreshLikeTotals,
       requestPermissions,
+      deleteAccount,
     ],
   );
 

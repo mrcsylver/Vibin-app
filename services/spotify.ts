@@ -136,6 +136,35 @@ export async function fetchSpotifyMe(accessToken: string): Promise<{ id: string;
  * distinct states let the UI say something true instead of always nagging
  * about Spotify. Parsing lives in `utils/nowPlaying.ts`.
  */
+type PlaybackResponse = { status: number; json: SpotifyPlayingJson | null };
+
+/**
+ * `market=from_token` matters more than it looks: without it Spotify answers
+ * with `item: null` for anything not available in the account's market, which
+ * the app then reported as "nothing playing" while music was audibly playing.
+ * `additional_types` is what stops podcasts doing the same.
+ */
+const PLAYBACK_QUERY = '?market=from_token&additional_types=track,episode';
+
+async function requestPlayback(path: string, accessToken: string): Promise<PlaybackResponse> {
+  const res = await fetch(`https://api.spotify.com/v1/${path}${PLAYBACK_QUERY}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok || res.status === 204) {
+    return { status: res.status, json: null };
+  }
+  return { status: res.status, json: (await res.json().catch(() => null)) as SpotifyPlayingJson | null };
+}
+
+/**
+ * What the listener is playing on Spotify, if anything.
+ *
+ * Never throws and never collapses every case into a bare "nothing playing":
+ * plenty of listeners are on Apple Music, a record player, or a private
+ * session, and they still belong on the radar with their status line. The
+ * distinct states let the UI say something true instead of always nagging
+ * about Spotify. Parsing lives in `utils/nowPlaying.ts`.
+ */
 export async function fetchNowPlaying(): Promise<NowPlaying> {
   let accessToken: string | null = null;
   try {
@@ -147,22 +176,26 @@ export async function fetchNowPlaying(): Promise<NowPlaying> {
     return nothingPlaying('unlinked');
   }
 
-  let status: number;
-  let json: SpotifyPlayingJson | null = null;
+  let playback: NowPlaying;
   try {
-    const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    status = res.status;
-    if (res.ok && res.status !== 204) {
-      json = (await res.json().catch(() => null)) as SpotifyPlayingJson | null;
+    const primary = await requestPlayback('me/player/currently-playing', accessToken);
+    playback = interpretPlayback(primary.status, primary.json);
+
+    // `currently-playing` intermittently returns 204 while a device is still
+    // playing — most often right after a track change. The fuller player
+    // endpoint answers correctly in that window.
+    if (playback.state === 'idle') {
+      const fallback = await requestPlayback('me/player', accessToken);
+      const fallbackPlayback = interpretPlayback(fallback.status, fallback.json);
+      if (fallbackPlayback.state !== 'idle') {
+        playback = fallbackPlayback;
+      }
     }
   } catch {
     // Offline, or the request was cut short. Presence still gets published.
     return nothingPlaying('unavailable');
   }
 
-  const playback = interpretPlayback(status, json);
   if (!playback.albumArtUrl) {
     return playback;
   }

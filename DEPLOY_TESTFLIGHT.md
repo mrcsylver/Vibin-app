@@ -41,6 +41,9 @@ change. **Skip this and the profile screen will show an error.**
 You should see "Success". It's safe to run more than once — it won't delete
 anything.
 
+**Run it again for this build.** It now also adds the function behind the new
+"Delete my data" button, which Apple requires before an App Store release.
+
 ## 1.2 Check your Supabase address
 
 Last time I found your `.env` file had a password pasted where the web address

@@ -41,6 +41,9 @@ export type NowPlaying = {
   albumName: string | null;
   albumArtUrl: string | null;
   albumColor: string | null;
+  /** Playback position and length in ms, when Spotify reports them. */
+  progressMs: number | null;
+  durationMs: number | null;
 };
 
 export type NearbyVibe = {

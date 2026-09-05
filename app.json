@@ -18,7 +18,9 @@
         "UIBackgroundModes": [
           "location"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMotionUsageDescription": "Vibin reads device motion to steady the compass arrow that shows which way you are facing on the radar.",
+        "NSPhotoLibraryAddUsageDescription": "Vibin saves your vibe card to your photos when you choose Save Image from the share sheet."
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -46,7 +48,9 @@
               "E174.1"
             ]
           }
-        ]
+        ],
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": []
       }
     },
     "android": {
@@ -81,7 +85,7 @@
           "isIosBackgroundLocationEnabled": true,
           "locationWhenInUsePermission": "Vibin uses your location to place you on the 300 ft radar and show who is listening to music around you.",
           "locationAlwaysAndWhenInUsePermission": "Vibin keeps your radar pin fresh in the background so people nearby can still see what you are listening to. Your pin disappears 15 minutes after you go quiet.",
-          "motionUsagePermission": false,
+          "motionUsagePermission": "Vibin reads device motion to steady the compass arrow that shows which way you are facing on the radar.",
           "isAndroidForegroundServiceEnabled": true
         }
       ],

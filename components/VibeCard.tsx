@@ -5,8 +5,14 @@ import { RetroMap } from './RetroMap';
 import type { NowPlaying, Profile } from '../types';
 
 /** The design was drawn at this width; every size below is a ratio of it. */
-const DESIGN_WIDTH = 390;
+const DESIGN_WIDTH = 540;
 export const CARD_ASPECT = 9 / 16;
+
+const PANEL = '#241C33';
+const PANEL_SUNK = '#2A2140';
+const RULE = '#3A3050';
+const MUTED = '#9A9AA8';
+const SPOTIFY_GREEN = '#2F7D4E';
 
 export type VibeCardProps = {
   /** Rendered width. Height follows the 9:16 story ratio. */
@@ -16,19 +22,25 @@ export type VibeCardProps = {
   coords: { latitude: number; longitude: number } | null;
   /** Listeners currently inside the 300 ft bubble, excluding the user. */
   nearbyCount: number;
-  /** How many of them are on this exact track. */
-  sameTrackCount: number;
   /** Fired once the album art has painted, so the capture is never blank. */
   onArtSettled?: () => void;
 };
+
+function formatClock(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
 
 /**
  * The shareable "now playing" card.
  *
  * Laid out with flex rather than absolute offsets, so a two-line track title or
  * a long username pushes the rows below it instead of colliding with them. The
- * album frame overlaps the map disc with a negative margin, which keeps that
- * one deliberate overlap without giving up automatic layout.
+ * media-player panel is centred rather than left-hung as in the source design,
+ * because the backdrop here is the generated overworld rather than a photo, and
+ * an off-centre panel over it reads as a mistake.
  */
 export function VibeCard({
   width,
@@ -36,7 +48,6 @@ export function VibeCard({
   track,
   coords,
   nearbyCount,
-  sameTrackCount,
   onArtSettled,
 }: VibeCardProps) {
   const s = (value: number) => Math.round(value * (width / DESIGN_WIDTH));
@@ -45,126 +56,158 @@ export function VibeCard({
   const hasTrack = Boolean(track?.title);
   const artUrl = track?.albumArtUrl ?? null;
   const glow = track?.albumColor ?? COLORS.fallbackAura;
-
-  const mapSize = s(288);
-  const albumInner = s(150);
-  const albumBorder = s(8);
-  const albumEdge = s(3);
-  const albumOuter = albumInner + albumBorder * 2 + albumEdge * 2;
-
   const status = profile.status.trim();
 
-  return (
-    <View style={[styles.card, { width, height, borderWidth: s(3) }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingHorizontal: s(18), paddingTop: s(16) }]}>
-        <View style={styles.wordmark}>
-          <View style={[styles.mark, { width: s(18), height: s(18) }]}>
-            <Text style={[styles.markText, { fontSize: s(9) }]}>V</Text>
-          </View>
-          <Text style={[styles.brand, { fontSize: s(13), letterSpacing: s(2) }]}>
-            {APP_NAME.toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.live}>
-          <View style={[styles.liveDot, { width: s(6), height: s(6) }]} />
-          <Text style={[styles.liveText, { fontSize: s(6) }]}>LIVE</Text>
-        </View>
-      </View>
+  const progressMs = track?.progressMs ?? null;
+  const durationMs = track?.durationMs ?? null;
+  const showProgress = hasTrack && progressMs !== null && durationMs !== null && durationMs > 0;
+  const progressPct = showProgress ? Math.min(1, Math.max(0, progressMs / durationMs)) : 0;
 
-      {/* Map disc with the album frame overlapping its lower edge */}
-      <View style={[styles.stage, { marginTop: s(10) }]}>
-        <RetroMap size={mapSize} coords={coords} tilesAcross={11} />
-        <View
-          style={[
-            styles.albumFrame,
-            {
-              marginTop: -albumOuter / 2,
-              padding: albumBorder,
-              borderColor: glow,
-              borderWidth: albumEdge,
-              shadowColor: glow,
-              shadowRadius: s(16),
-            },
-          ]}
-        >
-          {artUrl ? (
-            <Image
-              source={{ uri: artUrl }}
-              style={{ width: albumInner, height: albumInner }}
-              contentFit="cover"
-              onLoadEnd={onArtSettled}
-            />
-          ) : (
+  const artSize = s(186);
+  const panelPad = s(18);
+
+  return (
+    <View style={[styles.card, { width, height }]}>
+      {/* Backdrop: the same overworld the radar draws. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <RetroMap width={width} height={height} coords={coords} shape="fill" tilesAcross={9} />
+      </View>
+      <View style={styles.scrim} pointerEvents="none" />
+
+      <View style={[styles.inner, { padding: s(30) }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.wordmark}>
+            <Text style={[styles.brand, { fontSize: s(30) }]}>{APP_NAME}</Text>
+            <View style={[styles.bars, { gap: s(3), paddingTop: s(3) }]}>
+              <View style={[styles.bar, { width: s(12), height: s(3) }]} />
+              <View style={[styles.bar, { width: s(9), height: s(3) }]} />
+              <View style={[styles.bar, { width: s(5), height: s(3) }]} />
+            </View>
+          </View>
+          <View style={[styles.countPill, { paddingHorizontal: s(11), paddingVertical: s(8) }]}>
+            <Text style={[styles.countText, { fontSize: s(11), letterSpacing: s(1.4) }]}>
+              {nearbyCount === 0 ? 'FIRST ONE HERE' : `${nearbyCount} WITHIN 300 FT`}
+            </Text>
+          </View>
+        </View>
+
+        {/* Media player */}
+        <View style={[styles.panel, { padding: panelPad, borderRadius: s(14) }]}>
+          <View style={styles.panelHead}>
+            <Text style={[styles.panelTitle, { fontSize: s(17) }]}>Media player</Text>
+            <View style={[styles.panelDot, { width: s(20), height: s(20), borderRadius: s(10) }]} />
+          </View>
+
+          <View
+            style={[
+              styles.artFrame,
+              {
+                marginTop: s(16),
+                width: artSize,
+                height: artSize,
+                borderRadius: s(6),
+                borderWidth: s(3),
+                borderColor: glow,
+                shadowColor: glow,
+                shadowRadius: s(17),
+              },
+            ]}
+          >
+            {artUrl ? (
+              <Image
+                source={{ uri: artUrl }}
+                style={{ width: '100%', height: '100%' }}
+                contentFit="cover"
+                onLoadEnd={onArtSettled}
+              />
+            ) : (
+              <View style={styles.artFallback}>
+                <Image
+                  source={{ uri: profile.avatarUrl }}
+                  style={{ width: artSize * 0.6, height: artSize * 0.6 }}
+                />
+              </View>
+            )}
+          </View>
+
+          <View style={[styles.trackRow, { marginTop: s(16), gap: s(10) }]}>
             <View
               style={[
-                styles.artFallback,
-                { width: albumInner, height: albumInner },
+                styles.trackDot,
+                { width: s(22), height: s(22), borderRadius: s(11), backgroundColor: SPOTIFY_GREEN },
+              ]}
+            />
+            <View style={styles.trackText}>
+              <Text style={[styles.trackTitle, { fontSize: s(26), lineHeight: s(28) }]} numberOfLines={2}>
+                {hasTrack ? track?.title : status || 'Somewhere on campus'}
+              </Text>
+              <Text style={[styles.trackArtist, { fontSize: s(11), marginTop: s(4) }]} numberOfLines={1}>
+                {hasTrack ? track?.artist ?? profile.username : 'Not on Spotify right now'}
+              </Text>
+            </View>
+          </View>
+
+          {showProgress ? (
+            <View style={[styles.progressRow, { marginTop: s(16), gap: s(9) }]}>
+              <Text style={[styles.clock, { fontSize: s(10) }]}>{formatClock(progressMs)}</Text>
+              <View style={[styles.track, { height: s(3), borderRadius: s(2) }]}>
+                <View
+                  style={[
+                    styles.trackFill,
+                    { width: `${progressPct * 100}%`, height: s(3), borderRadius: s(2) },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.clock, { fontSize: s(10) }]}>{formatClock(durationMs)}</Text>
+            </View>
+          ) : null}
+
+          <View style={[styles.transport, { marginTop: s(16) }]}>
+            {[s(24), s(24)].map((size, index) => (
+              <View
+                key={`prev-${index}`}
+                style={[styles.transportDot, { width: size, height: size, borderRadius: size / 2 }]}
+              />
+            ))}
+            <View
+              style={[
+                styles.playButton,
+                { width: s(44), height: s(44), borderRadius: s(22) },
               ]}
             >
-              <Image
-                source={{ uri: profile.avatarUrl }}
-                style={{ width: albumInner * 0.62, height: albumInner * 0.62 }}
+              <View
+                style={[
+                  styles.playTriangle,
+                  {
+                    borderLeftWidth: s(13),
+                    borderTopWidth: s(8),
+                    borderBottomWidth: s(8),
+                    marginLeft: s(4),
+                  },
+                ]}
               />
             </View>
-          )}
+            {[s(24), s(24)].map((size, index) => (
+              <View
+                key={`next-${index}`}
+                style={[styles.transportDot, { width: size, height: size, borderRadius: size / 2 }]}
+              />
+            ))}
+          </View>
         </View>
-      </View>
 
-      {/* Track */}
-      <View style={[styles.trackBlock, { paddingHorizontal: s(20), marginTop: s(12) }]}>
-        <Text
-          style={[styles.title, { fontSize: s(38), lineHeight: s(40) }]}
-          numberOfLines={2}
-        >
-          {hasTrack ? track?.title : status || 'Somewhere on campus'}
-        </Text>
-
-        <View style={[styles.artistRow, { marginTop: s(4), gap: s(9) }]}>
-          <Text style={[styles.artist, { fontSize: s(24), lineHeight: s(26) }]} numberOfLines={1}>
-            {hasTrack ? track?.artist ?? profile.username : 'Not on Spotify right now'}
-          </Text>
-          {hasTrack && track?.albumName ? (
-            <Text style={[styles.album, { fontSize: s(6) }]} numberOfLines={1}>
-              {track.albumName}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
-      {/* Social proof — the line that makes someone ask what the app is */}
-      <View style={[styles.badgeRow, { marginTop: s(12) }]}>
-        <View style={[styles.badge, { paddingHorizontal: s(9), paddingVertical: s(6), borderWidth: s(2) }]}>
-          <View style={[styles.badgeDot, { width: s(6), height: s(6) }]} />
-          <Text style={[styles.badgeText, { fontSize: s(6) }]}>
-            {nearbyCount === 0
-              ? 'FIRST ONE HERE'
-              : sameTrackCount > 0
-                ? `${sameTrackCount} NEARBY ON THIS TRACK`
-                : `${nearbyCount} VIBING WITHIN 300 FT`}
-          </Text>
-        </View>
-      </View>
-
-      {/* User */}
-      <View style={[styles.footer, { paddingHorizontal: s(20), paddingBottom: s(18) }]}>
-        <View style={[styles.rule, { marginBottom: s(14) }]} />
-        <View style={[styles.userRow, { gap: s(11) }]}>
+        {/* Who */}
+        <View style={[styles.userCard, { padding: s(16), borderRadius: s(12), gap: s(13) }]}>
           <Image
             source={{ uri: profile.avatarUrl }}
-            style={{
-              width: s(46),
-              height: s(46),
-              borderWidth: s(3),
-              borderColor: glow,
-              backgroundColor: COLORS.parchment,
-            }}
+            style={{ width: s(48), height: s(48), borderRadius: s(24), backgroundColor: '#322646' }}
           />
           <View style={styles.userText}>
-            <Text style={[styles.handle, { fontSize: s(8), color: glow }]} numberOfLines={1}>
+            <Text style={[styles.handle, { fontSize: s(16) }]} numberOfLines={1}>
               @{profile.username || 'listener'}
             </Text>
-            <Text style={[styles.status, { fontSize: s(19), lineHeight: s(21), marginTop: s(4) }]} numberOfLines={1}>
+            <Text style={[styles.status, { fontSize: s(12), marginTop: s(5) }]} numberOfLines={1}>
               {status || 'Somewhere within 300 ft'}
             </Text>
           </View>
@@ -172,10 +215,10 @@ export function VibeCard({
 
         {/* Spotify's developer terms require attribution wherever their album
             art and track metadata are shown — and this card gets posted. */}
-        <View style={[styles.spotify, { marginTop: s(12), gap: s(6) }]}>
-          <View style={[styles.spotifyDot, { width: s(7), height: s(7) }]} />
-          <Text style={[styles.spotifyText, { fontSize: s(6) }]}>
-            {hasTrack ? 'NOW PLAYING ON SPOTIFY' : 'VIBIN · 300 FT MUSIC RADAR'}
+        <View style={[styles.spotifyBar, { marginTop: s(14), padding: s(14), borderRadius: s(6), gap: s(10) }]}>
+          <View style={[styles.spotifyDot, { width: s(10), height: s(10), borderRadius: s(5) }]} />
+          <Text style={[styles.spotifyText, { fontSize: s(14) }]}>
+            {hasTrack ? 'Now playing on Spotify' : `${APP_NAME} · 300 ft music radar`}
           </Text>
         </View>
       </View>
@@ -185,132 +228,163 @@ export function VibeCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: TILE_COLORS.bezel,
-    borderColor: TILE_COLORS.ringGold,
+    backgroundColor: '#1E1730',
     overflow: 'hidden',
+  },
+  scrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(20, 16, 31, 0.66)',
+  },
+  inner: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
   wordmark: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 7,
   },
-  mark: {
-    backgroundColor: TILE_COLORS.ringGold,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markText: {
-    fontFamily: FONTS.pixel,
-    color: TILE_COLORS.bezel,
-  },
   brand: {
-    fontFamily: FONTS.pixel,
+    fontWeight: '800',
+    color: TILE_COLORS.ringParchment,
+    letterSpacing: -1,
+  },
+  bars: {
+    alignItems: 'flex-start',
+  },
+  bar: {
+    backgroundColor: TILE_COLORS.ringGold,
+  },
+  countPill: {
+    backgroundColor: PANEL,
+    borderRadius: 5,
+  },
+  countText: {
+    fontFamily: FONTS.mono,
     color: TILE_COLORS.ringGold,
   },
-  live: {
+  panel: {
+    marginTop: 'auto',
+    backgroundColor: PANEL,
+    alignSelf: 'stretch',
+    shadowColor: '#0A0712',
+    shadowOpacity: 0.6,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 18 },
+    elevation: 14,
+  },
+  panelHead: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    justifyContent: 'space-between',
   },
-  liveDot: {
-    backgroundColor: '#E05A5A',
+  panelTitle: {
+    fontWeight: '800',
+    color: TILE_COLORS.ringParchment,
   },
-  liveText: {
-    fontFamily: FONTS.pixel,
-    color: '#E05A5A',
+  panelDot: {
+    backgroundColor: RULE,
   },
-  stage: {
-    alignItems: 'center',
-  },
-  albumFrame: {
-    backgroundColor: TILE_COLORS.bezel,
-    shadowOpacity: 0.85,
+  artFrame: {
+    alignSelf: 'center',
+    backgroundColor: PANEL_SUNK,
+    overflow: 'hidden',
+    shadowOpacity: 0.55,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 12,
   },
   artFallback: {
-    backgroundColor: '#322646',
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  trackBlock: {
+  trackRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  title: {
-    fontFamily: FONTS.terminal,
+  trackDot: {
+    flex: 0,
+  },
+  trackText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  trackTitle: {
+    fontFamily: FONTS.serif,
     color: TILE_COLORS.ringParchment,
-    textAlign: 'center',
   },
-  artistRow: {
+  trackArtist: {
+    fontFamily: FONTS.mono,
+    color: MUTED,
+  },
+  progressRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+  },
+  clock: {
+    fontFamily: FONTS.mono,
+    color: MUTED,
+  },
+  track: {
+    flex: 1,
+    backgroundColor: RULE,
+    overflow: 'hidden',
+  },
+  trackFill: {
+    backgroundColor: TILE_COLORS.ringParchment,
+  },
+  transport: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  transportDot: {
+    backgroundColor: RULE,
+  },
+  playButton: {
+    backgroundColor: TILE_COLORS.ringParchment,
     alignItems: 'center',
     justifyContent: 'center',
-    maxWidth: '100%',
   },
-  artist: {
-    fontFamily: FONTS.terminal,
-    color: TILE_COLORS.stone,
-    flexShrink: 1,
+  playTriangle: {
+    width: 0,
+    height: 0,
+    borderLeftColor: PANEL,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
   },
-  album: {
-    fontFamily: FONTS.pixel,
-    color: 'rgba(154, 154, 168, 0.72)',
-    flexShrink: 1,
-  },
-  badgeRow: {
-    alignItems: 'center',
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderColor: 'rgba(255, 217, 122, 0.5)',
-    backgroundColor: 'rgba(255, 217, 122, 0.1)',
-  },
-  badgeDot: {
-    backgroundColor: TILE_COLORS.ringGold,
-  },
-  badgeText: {
-    fontFamily: FONTS.pixel,
-    color: TILE_COLORS.ringGold,
-  },
-  footer: {
+  userCard: {
     marginTop: 'auto',
-  },
-  rule: {
-    height: 2,
-    backgroundColor: 'rgba(154, 154, 168, 0.28)',
-  },
-  userRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: PANEL,
   },
   userText: {
     flex: 1,
     minWidth: 0,
   },
   handle: {
-    fontFamily: FONTS.pixel,
-  },
-  status: {
-    fontFamily: FONTS.terminal,
+    fontWeight: '800',
     color: TILE_COLORS.ringParchment,
   },
-  spotify: {
+  status: {
+    fontFamily: FONTS.mono,
+    color: MUTED,
+  },
+  spotifyBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SPOTIFY_GREEN,
   },
   spotifyDot: {
-    backgroundColor: '#1DB954',
-    borderRadius: 999,
+    backgroundColor: TILE_COLORS.ringParchment,
   },
   spotifyText: {
-    fontFamily: FONTS.pixel,
-    color: 'rgba(154, 154, 168, 0.85)',
+    fontWeight: '600',
+    color: TILE_COLORS.ringParchment,
   },
 });

@@ -66,3 +66,15 @@ export async function sendLike(
     throw error;
   }
 }
+
+/**
+ * Erase everything this listener created: presence, both sides of their like
+ * history, and their lifetime tallies. Required by App Store guideline
+ * 5.1.1(v), which wants an in-app way to delete what an account produced.
+ */
+export async function deleteMyData(hashedId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_my_data', { p_spotify_id: hashedId });
+  if (error) {
+    throw error;
+  }
+}

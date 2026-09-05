@@ -17,7 +17,8 @@ function Gate() {
   const { ready, profile } = useSession();
   const [fontsLoaded, fontError] = useFonts({
     PressStart2P: require('./assets/fonts/PressStart2P-Regular.ttf'),
-    VT323: require('./assets/fonts/VT323-Regular.ttf'),
+    InstrumentSerif: require('./assets/fonts/InstrumentSerif-Regular.ttf'),
+    IBMPlexMono: require('./assets/fonts/IBMPlexMono-Regular.ttf'),
   });
 
   // A font that fails to load must never brick the app — fall through to the

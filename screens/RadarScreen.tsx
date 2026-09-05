@@ -1,12 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +18,7 @@ import { StatusComposer } from '../components/StatusComposer';
 import { ProfileModal } from '../components/ProfileModal';
 import { ShareVibeModal } from '../components/ShareVibeModal';
 import { useSession } from '../context/SessionContext';
-import { APP_NAME, COLORS, FONTS, TILE_COLORS } from '../utils/constants';
+import { APP_NAME, COLORS, FONTS, STATUS_MAX_LEN, TILE_COLORS } from '../utils/constants';
 import { metersToFeet } from '../utils/geo';
 import { describePlayback } from '../utils/nowPlaying';
 import { pushStatus, sendLike } from '../services/presence';
@@ -39,15 +38,23 @@ export function RadarScreen() {
     setProfile,
     refreshLikeTotals,
     requestPermissions,
+    deleteAccount,
   } = useSession();
 
+  const { width, height } = useWindowDimensions();
   const sheetRef = useRef<BottomSheet>(null);
   const [selected, setSelected] = useState<NearbyVibe | null>(null);
   const [statusDraft, setStatusDraft] = useState(profile?.status ?? '');
   const [liking, setLiking] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const size = Math.min(Dimensions.get('window').width - 8, 420);
+
+  // Keep the field showing what is actually saved, so a status can never look
+  // like it vanished after being submitted.
+  const savedStatus = profile?.status ?? '';
+  useEffect(() => {
+    setStatusDraft(savedStatus);
+  }, [savedStatus]);
 
   if (!profile) {
     return null;
@@ -62,13 +69,15 @@ export function RadarScreen() {
     void Haptics.selectionAsync();
   };
 
-  const onSubmitStatus = async () => {
-    const next = { ...profile, status: statusDraft.trim() };
-    await setProfile(next);
+  const submitStatus = async (text: string) => {
+    const clean = text.trim().slice(0, STATUS_MAX_LEN);
+    setStatusDraft(clean);
+    await setProfile({ ...profile, status: clean });
+    void Haptics.selectionAsync();
     try {
-      await pushStatus(profile.hashedId, next.status);
+      await pushStatus(profile.hashedId, clean);
     } catch {
-      // Heartbeat will retry the full payload.
+      // The heartbeat will retry the full payload.
     }
   };
 
@@ -103,16 +112,51 @@ export function RadarScreen() {
   };
 
   return (
-    <LinearGradient colors={['#1B1430', '#2B1F47', '#3A2A5C']} style={styles.flex}>
-      <SafeAreaView style={styles.flex}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-          <View style={styles.header}>
+    <View style={styles.root}>
+      {/* The overworld is the screen, not a panel on it. */}
+      {locationReady ? (
+        <RadarCanvas
+          width={width}
+          height={height}
+          me={profile}
+          myColor={track?.albumColor ?? null}
+          nearby={nearby}
+          coords={coords}
+          heading={heading}
+          onSelect={onSelect}
+        />
+      ) : null}
+
+      {/* Scrims keep the HUD readable over any terrain. */}
+      <LinearGradient
+        colors={['rgba(20,15,36,0.94)', 'rgba(20,15,36,0.55)', 'rgba(20,15,36,0)']}
+        style={[styles.scrimTop, { height: height * 0.3 }]}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={['rgba(20,15,36,0)', 'rgba(20,15,36,0.72)', 'rgba(20,15,36,0.96)']}
+        style={[styles.scrimBottom, { height: height * 0.34 }]}
+        pointerEvents="none"
+      />
+
+      <SafeAreaView style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.flex}
+          pointerEvents="box-none"
+        >
+          <View style={styles.header} pointerEvents="box-none">
             <View style={styles.headerText}>
               <Text style={styles.kicker}>{APP_NAME.toUpperCase()}</Text>
               <Text style={styles.title}>Campus radar</Text>
               <Text style={styles.meta} numberOfLines={1}>
                 {playback.line}
               </Text>
+              {savedStatus ? (
+                <Text style={styles.statusEcho} numberOfLines={1}>
+                  “{savedStatus}”
+                </Text>
+              ) : null}
             </View>
 
             <Pressable onPress={openProfile} style={styles.likesPill} accessibilityRole="button">
@@ -122,49 +166,38 @@ export function RadarScreen() {
             </Pressable>
           </View>
 
-          {playback.nudge ? <Text style={styles.nudge}>{playback.nudge}</Text> : null}
-          {lastError && locationReady ? <Text style={styles.error}>{lastError}</Text> : null}
+          {lastError && locationReady ? (
+            <Text style={styles.error} numberOfLines={2}>
+              {lastError}
+            </Text>
+          ) : null}
 
-          <View style={styles.radar}>
-            {locationReady ? (
-              <>
-                {nearby.length === 0 ? (
-                  <View style={styles.emptyHint} pointerEvents="none">
-                    <Text style={styles.emptyText}>Scanning 300 ft…</Text>
-                  </View>
-                ) : null}
-                <RadarCanvas
-                  size={size}
-                  me={profile}
-                  myColor={track?.albumColor ?? null}
-                  nearby={nearby}
-                  coords={coords}
-                  heading={heading}
-                  onSelect={onSelect}
-                />
-              </>
-            ) : (
-              <View style={styles.gate}>
-                <Text style={styles.gateTitle}>
-                  {permissions.servicesEnabled ? 'Location access needed' : 'Location Services are off'}
-                </Text>
-                <Text style={styles.gateBody}>
-                  {APP_NAME} plots everyone within 300 ft of you. Without location access nobody can
-                  see you on the map, and you cannot see them.
-                </Text>
-                <Pressable onPress={() => void onFixPermissions()} style={styles.gateCta}>
-                  <Text style={styles.gateCtaText}>
-                    {permissions.locationBlocked || !permissions.servicesEnabled
-                      ? 'Open Settings'
-                      : 'Allow location'}
+          {/* Spacer: touches fall through here to the map underneath. */}
+          <View style={styles.flex} pointerEvents="box-none">
+            {!locationReady ? (
+              <View style={styles.gateWrap} pointerEvents="box-none">
+                <View style={styles.gate}>
+                  <Text style={styles.gateTitle}>
+                    {permissions.servicesEnabled ? 'Location access needed' : 'Location Services are off'}
                   </Text>
-                </Pressable>
+                  <Text style={styles.gateBody}>
+                    {APP_NAME} plots everyone within 300 ft of you. Without location access nobody can
+                    see you on the map, and you cannot see them.
+                  </Text>
+                  <Pressable onPress={() => void onFixPermissions()} style={styles.gateCta}>
+                    <Text style={styles.gateCtaText}>
+                      {permissions.locationBlocked || !permissions.servicesEnabled
+                        ? 'Open Settings'
+                        : 'Allow location'}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
-            )}
+            ) : null}
           </View>
 
           {locationReady ? (
-            <View style={styles.shareRow}>
+            <View style={styles.shareRow} pointerEvents="box-none">
               {nearby.length === 0 ? (
                 <Text style={styles.aloneText}>
                   Nobody within 300 ft yet. Post your vibe card so people know where to find you.
@@ -176,16 +209,15 @@ export function RadarScreen() {
             </View>
           ) : null}
 
-          <StatusComposer value={statusDraft} onChange={setStatusDraft} onSubmit={() => void onSubmitStatus()} />
-          {!track && !lastError && locationReady ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={TILE_COLORS.ringGold} />
-            </View>
-          ) : null}
+          <StatusComposer
+            value={statusDraft}
+            onChange={setStatusDraft}
+            onSubmit={(text) => void submitStatus(text)}
+          />
         </KeyboardAvoidingView>
-
-        <NearbySheet ref={sheetRef} vibe={selected} onLike={() => void onLike()} liking={liking} />
       </SafeAreaView>
+
+      <NearbySheet ref={sheetRef} vibe={selected} onLike={() => void onLike()} liking={liking} />
 
       <ShareVibeModal
         visible={shareOpen}
@@ -205,14 +237,31 @@ export function RadarScreen() {
         onRefresh={refreshLikeTotals}
         onRequestPermissions={requestPermissions}
         onOpenSettings={openAppSettings}
+        onDeleteAccount={deleteAccount}
         onClose={() => setProfileOpen(false)}
       />
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: TILE_COLORS.bezel,
+  },
   flex: { flex: 1 },
+  scrimTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  scrimBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -224,22 +273,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   kicker: {
-    // Same pixel face as the wordmark on the share card, so the two read as
-    // one brand. Falls back to the system font if the face failed to load.
     fontFamily: FONTS.pixel,
     color: TILE_COLORS.ringGold,
     letterSpacing: 2,
     fontSize: 10,
   },
   title: {
+    marginTop: 4,
     fontSize: 28,
     fontWeight: '800',
     color: TILE_COLORS.ringParchment,
   },
   meta: {
     marginTop: 4,
-    color: 'rgba(246, 228, 184, 0.65)',
+    color: 'rgba(246, 228, 184, 0.68)',
     fontWeight: '600',
+  },
+  statusEcho: {
+    marginTop: 3,
+    color: TILE_COLORS.ringGold,
+    fontWeight: '700',
+    fontSize: 13,
+    fontStyle: 'italic',
   },
   likesPill: {
     alignItems: 'center',
@@ -248,7 +303,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
     borderColor: TILE_COLORS.ringGold,
-    backgroundColor: 'rgba(255, 217, 122, 0.1)',
+    backgroundColor: 'rgba(27, 20, 48, 0.7)',
     minWidth: 74,
   },
   likesHeart: {
@@ -269,38 +324,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
-  nudge: {
-    marginTop: 8,
-    marginHorizontal: 22,
-    color: 'rgba(246, 228, 184, 0.72)',
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 17,
-  },
   error: {
     marginTop: 8,
     marginHorizontal: 22,
     color: '#FF8A80',
     fontSize: 12,
   },
-  radar: {
+  gateWrap: {
     flex: 1,
     justifyContent: 'center',
-  },
-  emptyHint: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: 18,
-    zIndex: 2,
-  },
-  emptyText: {
-    color: TILE_COLORS.ringParchment,
-    fontWeight: '600',
-    backgroundColor: 'rgba(27, 20, 48, 0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 4,
-    overflow: 'hidden',
   },
   gate: {
     marginHorizontal: 24,
@@ -308,7 +340,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 2,
     borderColor: TILE_COLORS.ringGold,
-    backgroundColor: 'rgba(27, 20, 48, 0.75)',
+    backgroundColor: 'rgba(27, 20, 48, 0.92)',
   },
   gateTitle: {
     color: TILE_COLORS.ringGold,
@@ -339,7 +371,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   aloneText: {
-    color: 'rgba(246, 228, 184, 0.72)',
+    color: 'rgba(246, 228, 184, 0.78)',
     fontSize: 12.5,
     fontWeight: '600',
     lineHeight: 17,
@@ -351,16 +383,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: TILE_COLORS.ringGold,
-    backgroundColor: 'rgba(255, 217, 122, 0.12)',
+    backgroundColor: 'rgba(27, 20, 48, 0.78)',
   },
   shareCtaText: {
     color: TILE_COLORS.ringGold,
     fontWeight: '800',
     letterSpacing: 0.4,
     fontSize: 15,
-  },
-  loadingRow: {
-    alignItems: 'center',
-    paddingBottom: 8,
   },
 });
