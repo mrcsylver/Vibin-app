@@ -228,12 +228,17 @@ npx expo prebuild --platform ios --clean
 npx pod-install
 ```
 ```bash
-open ios/Vibin.xcworkspace
+open ios/*.xcworkspace
 ```
+
+The project is called **VibinMusic**, after `expo.name` in `app.json`. The name
+under the app icon is `CFBundleDisplayName` (`Vibin`), and App Store Connect
+matches on the bundle identifier, not either name.
 
 Then in Xcode:
 
-1. Click **Vibin** at the top of the left sidebar, then the **Vibin** target.
+1. Click **VibinMusic** at the top of the left sidebar, then the **VibinMusic**
+   target.
 2. **Signing & Capabilities** → tick **Automatically manage signing** → choose
    your **Team**. Every red error in that pane should clear.
 3. In the top bar next to the app name, set the destination to **Any iOS Device
@@ -251,6 +256,16 @@ Two things this route handles differently:
 - **The build number lives in `app.json`.** Bump `ios.buildNumber` by one before
   each upload — App Store Connect rejects a number it has already seen. It is at
   `2` now, because build `1` was the rejected delivery.
+
+Before spending twenty minutes on an archive, check the generated config is the
+one you expect:
+
+```bash
+plutil -p ios/VibinMusic/Info.plist | grep -E 'NSMotionUsage|CFBundleVersion'
+```
+
+`CFBundleVersion => 2` and a motion string present means the rejection is fixed.
+If either is missing, `ios/` is stale — re-run `prebuild --clean`.
 
 If `npx pod-install` fails saying CocoaPods is missing, run
 `sudo gem install cocoapods` once, then try again.

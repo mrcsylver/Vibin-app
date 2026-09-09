@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Vibin",
+    "name": "Vibin Music",
     "slug": "Vibin",
     "scheme": "vibin",
     "version": "1.0.0",
@@ -20,6 +20,7 @@
           "location"
         ],
         "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDisplayName": "Vibin",
         "NSMotionUsageDescription": "Vibin reads device motion to steady the compass arrow that shows which way you are facing on the radar.",
         "NSPhotoLibraryAddUsageDescription": "Vibin saves your vibe card to your photos when you choose Save Image from the share sheet."
       },
