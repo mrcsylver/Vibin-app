@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.marcsylver.Vibin",
+      "buildNumber": "2",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Vibin uses your location to place you on the 300 ft radar and show who is listening to music around you.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Vibin keeps your radar pin fresh in the background so people nearby can still see what you are listening to. Your pin disappears 15 minutes after you go quiet.",

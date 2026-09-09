@@ -10,12 +10,14 @@
  * `aps-environment` has to match the provisioning profile or codesigning fails.
  * Apple's Development profiles carry `development`; Ad Hoc (EAS `preview`) and
  * App Store (EAS `production`, the TestFlight path) both carry `production`.
+ *
+ * Only an explicit `development` build profile gets `development`. A bare local
+ * `expo prebuild` sets no profile, and that path is an Xcode archive bound for
+ * TestFlight, which needs `production` — defaulting the other way silently
+ * produced a profile mismatch at signing time.
  */
 function apsEnvironmentFor(profile) {
-  if (!profile || profile === 'development') {
-    return 'development';
-  }
-  return 'production';
+  return profile === 'development' ? 'development' : 'production';
 }
 
 function withNotificationMode(plugins, mode) {
