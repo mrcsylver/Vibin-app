@@ -9,8 +9,8 @@ Built with Expo SDK 57 and React Native. The backend is a single Supabase
 project: PostGIS for the proximity query, Realtime for nudges, and nothing else.
 There is no server to run.
 
-**Status:** complete MVP. Shipped to Apple and accepted — version 1.0.0 (build 2)
-was delivered to App Store Connect and distributed through TestFlight.
+**Status:** complete MVP. Version 1.0.0 (build 2) uploads to App Store Connect,
+clears Apple's binary processing, and installs and runs through TestFlight.
 
 ---
 
@@ -130,7 +130,7 @@ Everything listed here is implemented and was exercised on real devices.
   backgrounded, with the iOS background-location mode declared.
 - **App Store compliance** — privacy manifest, all `NS*UsageDescription` strings,
   `ITSAppUsesNonExemptEncryption`, and a correct `aps-environment` for each build
-  profile. This build passed Apple's processing.
+  profile. This build clears Apple's binary processing.
 
 ## Setup
 

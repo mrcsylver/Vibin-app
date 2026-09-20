@@ -5,7 +5,7 @@ post. Each section is written to stand alone. Anything in `«guillemets»` is a
 blank you need to fill in before posting.
 
 **Please keep this listing honest.** Vibin has no users, no revenue and no
-traction. It is a finished, Apple-accepted codebase being sold as source. That
+traction. It is a finished, TestFlight-running codebase being sold as source. That
 is a real and saleable thing, and buyers on these marketplaces reward sellers
 who say so plainly. Everything below is written to be true as it stands.
 
@@ -13,13 +13,13 @@ who say so plainly. Everything below is written to be true as it stands.
 
 ## Title
 
-> **Vibin — 300ft Music Radar. Apple-accepted Expo/React Native app with Supabase + PostGIS backend.**
+> **Vibin — 300ft Music Radar. Complete Expo/React Native app with a Supabase + PostGIS backend.**
 
 Alternates:
 
 > **See what everyone within 300 feet is playing on Spotify — full source, TestFlight-ready**
 
-> **Proximity music discovery app (iOS + Android) — complete MVP, passed Apple review**
+> **Proximity music discovery app (iOS + Android) — complete MVP, running on TestFlight**
 
 ## Subtitle
 
@@ -40,9 +40,10 @@ Alternates:
 > distance and direction only.
 >
 > This is a finished MVP, not a prototype. It was built for a campus pilot, went
-> through a real Apple submission, and version 1.0.0 (build 2) was accepted and
-> distributed through TestFlight. Every App Store compliance item is already
-> handled — privacy manifest, usage-description strings, in-app account deletion,
+> through Apple's build pipeline: version 1.0.0 (build 2) uploads to App Store
+> Connect, clears Apple's binary processing, and installs and runs on real
+> devices through TestFlight. Every App Store compliance item is already handled —
+> privacy manifest, usage-description strings, in-app account deletion,
 > encryption declaration.
 >
 > I am selling it because I am moving on to other work, not because it stopped
@@ -171,14 +172,14 @@ Alternates:
 ## Ideal buyer
 
 > - **Indie hackers and solo mobile developers** who want a finished,
->   store-accepted iOS codebase to relaunch under their own brand instead of
->   starting from a blank Expo template.
+>   working, TestFlight-ready iOS codebase to relaunch under their own brand
+>   instead of starting from a blank Expo template.
 > - **Social and location app founders** who need working proximity
 >   infrastructure — the PostGIS layer, the ephemeral presence model and the
 >   privacy design generalise to dating, events, campus, conference and venue
 >   apps with no music in them at all.
 > - **Developers learning production React Native** who would rather read a real
->   app that passed Apple review than another tutorial. The commit history shows
+>   app that builds, signs and ships than another tutorial. The commit history shows
 >   each problem being found and fixed.
 > - **Anyone who needs Spotify integration.** The auth and now-playing layer is
 >   lift-and-shift into any other project, and it handles the edge cases most
