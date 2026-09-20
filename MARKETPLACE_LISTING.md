@@ -49,7 +49,8 @@ Alternates:
 > I am selling it because I am moving on to other work, not because it stopped
 > working. The Spotify and Supabase accounts are mine and will be wound down;
 > the buyer connects their own in about fifteen minutes using the setup guide in
-> the README.
+> the README. Sold as-is, with no post-sale support — which is why the
+> documentation is as thorough as it is.
 
 ## Value proposition
 
@@ -160,7 +161,11 @@ Alternates:
 > - `GIT_GUIDE.md` — a plain-language Git primer written against this repo.
 >
 > **Support**
-> - «e.g. 14 days of email support for setup questions» — set your own terms.
+> - None. This is an as-is sale with no setup support, consulting or ongoing
+>   involvement. The documentation is written to stand on its own precisely
+>   because of that — `DEPLOY_TESTFLIGHT.md` walks a complete beginner from a
+>   fresh machine to a TestFlight build, and every environment variable is
+>   documented with the dashboard path to find its value.
 >
 > **Not included** (and not transferable)
 > - The Apple Developer account and the existing TestFlight build — the buyer
