@@ -40,7 +40,7 @@ create index if not exists active_users_last_seen_idx
   on public.active_users (last_seen_at);
 
 -- -----------------------------------------------------------------------------
--- Nudge / like events. Realtime subscription delivers these to the receiver.
+-- Nudge / like events. insert_like() broadcasts each one to the receiver.
 -- -----------------------------------------------------------------------------
 create table if not exists public.likes (
   id uuid primary key default gen_random_uuid(),
@@ -53,7 +53,9 @@ create table if not exists public.likes (
 create index if not exists likes_to_created_idx
   on public.likes (to_spotify_id, created_at desc);
 
-alter table public.likes replica identity full;
+-- `likes` is deliberately NOT added to the supabase_realtime publication.
+-- Delivery to devices goes through realtime.send() inside insert_like();
+-- a row-change feed would be filtered out by the RLS lock further down.
 
 -- -----------------------------------------------------------------------------
 -- Durable like counters.
@@ -288,6 +290,27 @@ begin
     likes_sent = public.like_totals.likes_sent + 1,
     updated_at = now();
 
+  -- Tell the receiver's device, so it can raise a local notification.
+  --
+  -- This is a Realtime *broadcast*, not a row-change feed. Every table below is
+  -- locked with RLS and no SELECT grant to `anon`, and Realtime's
+  -- `postgres_changes` path re-runs that same check as the subscribing role —
+  -- so a subscription on `likes` is filtered out server side and silently never
+  -- fires. Broadcast is routed by topic and needs no read access, so presence
+  -- and the like graph stay unreadable. Never let a delivery problem fail the
+  -- like itself.
+  begin
+    perform realtime.send(
+      jsonb_build_object('distance_ft', greatest(p_distance_ft, 0)),
+      'like',
+      'likes:' || p_to_spotify_id,
+      false
+    );
+  exception
+    when others then
+      raise notice 'Realtime broadcast unavailable; the like was still recorded.';
+  end;
+
   return new_id;
 end;
 $$;
@@ -369,13 +392,6 @@ grant execute on function public.delete_my_data(text) to anon, authenticated;
 
 grant execute on function public.expire_stale_presence() to postgres;
 
--- Realtime: Database → Replication → supabase_realtime must include `likes`.
-do $$
-begin
-  execute 'alter publication supabase_realtime add table public.likes';
-exception
-  when duplicate_object then null;
-  when undefined_object then
-    raise notice 'Enable Realtime for public.likes in the Supabase dashboard if this publication is missing.';
-end;
-$$;
+-- Realtime needs no dashboard setup: insert_like() broadcasts on the topic
+-- `likes:<recipient hash>` and the app subscribes to that topic directly.
+grant usage on schema realtime to postgres;

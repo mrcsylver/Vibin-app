@@ -18,7 +18,11 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return state.notifications;
 }
 
-export async function notifyIncomingLike(distanceFt: number): Promise<void> {
+/**
+ * `distanceFt` is null when the nudge was noticed by the one-minute reconcile
+ * rather than the live broadcast, which carries counts but no distance.
+ */
+export async function notifyIncomingLike(distanceFt: number | null): Promise<void> {
   const { notifications } = await readPermissions();
   if (!notifications) {
     return;
@@ -27,7 +31,10 @@ export async function notifyIncomingLike(distanceFt: number): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: APP_NAME,
-      body: `Someone ${distanceFt} ft away liked your track!`,
+      body:
+        distanceFt === null
+          ? 'Someone nearby liked your track!'
+          : `Someone ${distanceFt} ft away liked your track!`,
       sound: true,
     },
     trigger: null,
@@ -37,22 +44,25 @@ export async function notifyIncomingLike(distanceFt: number): Promise<void> {
 /**
  * Subscribe to likes aimed at this device. The receiver shows a local notification;
  * no push provider or stored PII is required.
+ *
+ * This listens for a Realtime *broadcast* rather than a row change. Every table
+ * in this schema has RLS on with no policy and no SELECT grant to `anon`, and
+ * Realtime's `postgres_changes` path re-runs exactly that check as the
+ * subscribing role — so a row subscription on `likes` is filtered out server
+ * side and never arrives, with no error on either end. `insert_like()` emits the
+ * broadcast instead, which is routed by topic and needs no read access, so the
+ * tables stay locked.
+ *
+ * The topic carries the recipient's SHA-256 id, which is the same value the rest
+ * of the app already treats as their identity.
  */
 export function subscribeToLikes(hashedId: string, onLike: (distanceFt: number) => void): RealtimeChannel {
   return supabase
     .channel(`likes:${hashedId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'likes',
-        filter: `to_spotify_id=eq.${hashedId}`,
-      },
-      (payload) => {
-        const row = payload.new as { distance_ft?: number };
-        onLike(typeof row.distance_ft === 'number' ? row.distance_ft : 0);
-      },
-    )
+    .on('broadcast', { event: 'like' }, (message) => {
+      const payload = message.payload as { distance_ft?: number } | undefined;
+      const distanceFt = Number(payload?.distance_ft);
+      onLike(Number.isFinite(distanceFt) ? distanceFt : 0);
+    })
     .subscribe();
 }

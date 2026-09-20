@@ -46,16 +46,19 @@ anything.
 
 ## 1.2 Check your Supabase address
 
-Last time I found your `.env` file had a password pasted where the web address
-should be. I corrected it to:
+The single most common setup mistake is pasting an API **key** into the slot
+that wants the project **web address**. The app then sends every request to a
+hostname that does not exist, and nothing works with no obvious error. The line
+must look exactly like this, with your own project reference in the middle:
 
 ```
-EXPO_PUBLIC_SUPABASE_URL=https://ajwdrjsetcfryzqtcztg.supabase.co
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 ```
 
-Please confirm it matches: Supabase dashboard → **Project Settings** →
-**Data API** → **Project URL**. If it's different, open `.env` in TextEdit and
-fix that line.
+Confirm it matches: Supabase dashboard → **Project Settings** → **Data API** →
+**Project URL**. If it's different, open `.env` in TextEdit and fix that line.
+The app checks the shape of this value on startup and will tell you if it is
+wrong.
 
 ## 1.3 Tell Spotify about the app
 

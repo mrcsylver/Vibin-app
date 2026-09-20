@@ -106,16 +106,37 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Highest `likesReceived` this device has already announced. The live
+  // broadcast normally gets there first; this watermark is what lets the
+  // one-minute reconcile below tell a genuinely new nudge from one already
+  // shown, so neither path can double-notify.
+  const announcedReceivedRef = useRef<number | null>(null);
+
   const refreshLikeTotals = useCallback(async () => {
     if (!hashedId) {
       return;
     }
     try {
-      setLikeTotals(await fetchAllTimeLikes(hashedId));
+      const totals = await fetchAllTimeLikes(hashedId);
+      setLikeTotals(totals);
+
+      // Safety net for a broadcast that never arrived — a dropped socket, the
+      // app asleep, or Realtime still warming up. Without it a missed message
+      // is lost silently; with it the nudge is late by at most one heartbeat.
+      const announced = announcedReceivedRef.current;
+      announcedReceivedRef.current = totals.likesReceived;
+      if (announced !== null && totals.likesReceived > announced) {
+        void notifyIncomingLike(null);
+      }
     } catch {
       // Keep the last known tally rather than flashing zeros.
     }
   }, [hashedId]);
+
+  // Declared here rather than beside the likes effect below: the app-state
+  // listener also reconciles the tally, and that effect is defined first.
+  const likeTotalsRef = useRef(refreshLikeTotals);
+  likeTotalsRef.current = refreshLikeTotals;
 
   // --- Boot -----------------------------------------------------------------
   // A returning user goes straight to the radar, so their permissions have to be
@@ -157,6 +178,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (next === 'active') {
         void readPermissions().then(setPermissions).catch(() => undefined);
         void heartbeatRef.current();
+        void likeTotalsRef.current();
       }
     });
     return () => subscription.remove();
@@ -236,29 +258,42 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [canLocate]);
 
   // --- Likes ----------------------------------------------------------------
-  const likeTotalsRef = useRef(refreshLikeTotals);
-  likeTotalsRef.current = refreshLikeTotals;
-
   useEffect(() => {
     if (!hashedId) {
       setLikeTotals(EMPTY_LIKE_TOTALS);
+      announcedReceivedRef.current = null;
       return;
     }
 
+    // A different listener signed in: start their watermark unset so the first
+    // fetch establishes a baseline instead of announcing their whole history.
+    announcedReceivedRef.current = null;
     void likeTotalsRef.current();
 
     const channel = subscribeToLikes(hashedId, (distanceFt) => {
       void notifyIncomingLike(distanceFt);
-      // Optimistic bump so the badge reacts instantly, then reconcile.
+      // Optimistic bump so the badge reacts instantly, then reconcile. Moving
+      // the watermark here too is what stops the reconcile announcing this same
+      // nudge a second time.
       setLikeTotals((current) => ({
         ...current,
         likesReceived: current.likesReceived + 1,
         recentReceived: current.recentReceived + 1,
       }));
+      if (announcedReceivedRef.current !== null) {
+        announcedReceivedRef.current += 1;
+      }
       void likeTotalsRef.current();
     });
 
+    // Same cadence as the presence heartbeat. This is the tick that turns a
+    // lost broadcast into a one-minute delay rather than a nudge nobody sees.
+    const reconcile = setInterval(() => {
+      void likeTotalsRef.current();
+    }, PRESENCE_POLL_MS);
+
     return () => {
+      clearInterval(reconcile);
       void channel.unsubscribe();
     };
   }, [hashedId]);

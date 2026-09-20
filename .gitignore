@@ -30,9 +30,21 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files — every variant, except the documented template
 .env
-.env*.local
+.env.*
+!.env.example
+
+# editors
+.idea/
+.vscode/
+
+# logs and coverage
+*.log
+coverage/
+
+# EAS local state
+.eas/
 
 # typescript
 *.tsbuildinfo
